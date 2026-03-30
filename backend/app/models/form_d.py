@@ -112,13 +112,33 @@ class FormDFiling(BaseModel):
     @property
     def is_private_credit_candidate(self) -> bool:
         """
-        Heuristic: true if this looks like a private credit / BDC-adjacent fund.
-        We'll refine this with entity resolution in Phase 1, week 3-4.
+        True if this filing looks like a private credit / BDC-adjacent fund.
+
+        Form D has no "private credit" category — these funds file as
+        "Private Equity Fund" or "Other Investment Fund". We exclude known
+        non-private-credit types by fund_type and name keywords.
         """
+        if not self.is_pooled_investment_fund:
+            return False
+
         fund_type = self.investment_fund_type.lower()
-        return self.is_pooled_investment_fund and any(
-            kw in fund_type for kw in ["private equity", "other investment", "hedge"]
-        )
+
+        # Exclude explicit non-private-credit fund types
+        if fund_type == "venture capital fund":
+            return False
+
+        # Exclude real estate by name (common false positives)
+        name = self.entity_name.lower()
+        real_estate_keywords = [
+            "real estate", "realty", "reit", "property", "properties",
+            "housing", "mortgage", "land", "industrial", "multifamily",
+            "residential", "commercial real",
+        ]
+        if any(kw in name for kw in real_estate_keywords):
+            return False
+
+        # Keep: Private Equity Fund, Other Investment Fund, Hedge Fund
+        return any(kw in fund_type for kw in ["private equity", "other investment", "hedge"])
 
     @property
     def offering_size_m(self) -> float | None:

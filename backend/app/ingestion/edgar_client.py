@@ -76,14 +76,16 @@ async def search_form_d_filings(
 
             for hit in hits:
                 src = hit.get("_source", {})
+                # ciks is a list of 10-digit strings; take the first
+                ciks = src.get("ciks", [])
+                cik = ciks[0] if ciks else ""
+                # _id looks like "edgar/data/1234567/0001234567-26-000001.txt"
+                file_id = hit.get("_id", "")
                 results.append(
                     {
                         "entity_name": src.get("entity_name", ""),
-                        "cik": src.get("file_num", "").replace("026-", "").zfill(10)
-                        if src.get("file_num", "").startswith("026-")
-                        else src.get("ciks", [""])[0],
-                        "accession_no": src.get("period_of_report", ""),
-                        "file_id": hit.get("_id", ""),
+                        "cik": cik,
+                        "file_id": file_id,
                         "filed_at": src.get("file_date", ""),
                         "form_type": src.get("form_type", "D"),
                         "period_of_report": src.get("period_of_report", ""),

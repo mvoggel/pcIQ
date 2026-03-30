@@ -1,13 +1,23 @@
-.PHONY: run ingest install
+PYTHON := python3
+PIP := $(PYTHON) -m pip
+
+.PHONY: run ingest install test venv
+
+venv:
+	$(PYTHON) -m venv .venv
+	@echo "Run: source .venv/bin/activate"
 
 install:
-	pip install -r requirements.txt
+	$(PIP) install -r requirements.txt
 
 run:
 	uvicorn app.main:app --reload --port 8000
 
 ingest:
-	python -m app.ingestion.run
+	$(PYTHON) -m app.ingestion.run
+
+ingest-dry:
+	$(PYTHON) -m app.ingestion.run --dry-run
 
 test:
 	pytest tests/ -v
