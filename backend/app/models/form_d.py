@@ -165,14 +165,29 @@ class FormDFiling(BaseModel):
         if fund_type == "venture capital fund":
             return False
 
-        # Exclude real estate by name (common false positives)
         name = self.entity_name.lower()
+
+        # Exclude real estate funds by name
         real_estate_keywords = [
             "real estate", "realty", "reit", "property", "properties",
             "housing", "mortgage", "land", "industrial", "multifamily",
-            "residential", "commercial real",
+            "residential", "commercial real", "greystar", "homebuilder",
+            "single family", "single-family",
         ]
         if any(kw in name for kw in real_estate_keywords):
+            return False
+
+        # Exclude angel / crowdfunding networks — too small, not institutional
+        angel_keywords = [
+            "angel", "angelsdeck", "angelnv", "startup", "crowdfund",
+            "seed fund", "accelerator",
+        ]
+        if any(kw in name for kw in angel_keywords):
+            return False
+
+        # Exclude crypto / digital asset funds — not private credit
+        crypto_keywords = ["crypto", "bitcoin", "blockchain", "digital asset", "defi", "token"]
+        if any(kw in name for kw in crypto_keywords):
             return False
 
         # Keep: Private Equity Fund, Other Investment Fund, Hedge Fund

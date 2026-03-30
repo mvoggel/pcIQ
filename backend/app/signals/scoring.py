@@ -65,9 +65,11 @@ def score_filing(filing: FormDFiling, territory_states: set[str]) -> TerritorySi
     """
     score = 0.0
 
-    # Known platform bonus
+    # Known platform bonus — the strongest signal
     if filing.known_platform_names:
         score += 3.0
+    elif filing.platform_names:
+        score += 1.0  # any platform is still a signal
 
     # Territory overlap — states being solicited overlap with wholesaler territory
     sol_states = filing.all_solicitation_states
@@ -80,17 +82,21 @@ def score_filing(filing: FormDFiling, territory_states: set[str]) -> TerritorySi
             score += 2.0
         in_territory = bool(overlap) or filing.address.state_or_country.upper() in territory_states
 
-    # Size bonus
+    # Size bonus — private credit is institutional, sub-$1M is noise
     size = filing.offering_size_m or 0
-    if size > 50:
+    if size > 100:
+        score += 3.0
+    elif size > 50:
         score += 2.0
     elif size > 10:
         score += 1.0
+    elif size > 0 and size < 2:
+        score -= 1.0   # penalize micro raises (likely not institutional)
 
-    # Freshness bonus (within 14 days)
+    # Freshness bonus (within 7 days)
     if filing.date_of_first_sale:
         days_old = (date.today() - filing.date_of_first_sale).days
-        if days_old <= 14:
+        if days_old <= 7:
             score += 1.0
 
     # Fund type bonus
@@ -137,9 +143,10 @@ def generate_territory_report(
         signal = score_filing(filing, states_set)
         report.signals.append(signal)
 
-        # Count platform activity across all filings (not just territory)
-        for p in filing.platform_names:
-            platform_counts[p] += 1
+        # Count platform activity only for filings relevant to this territory
+        if signal.is_in_territory or not filing.all_solicitation_states:
+            for p in filing.platform_names:
+                platform_counts[p] += 1
 
     report.platform_counts = dict(platform_counts)
     return report
@@ -161,16 +168,20 @@ def print_territory_report(report: TerritoryReport) -> None:
             print(f"    {name:45s}  {count:3d} fund(s){flag}")
         print()
 
-    # Top signals in territory
-    in_territory = [s for s in report.top_signals if s.is_in_territory]
+    # Top signals in territory — only show scored signals
+    in_territory = [s for s in report.top_signals if s.is_in_territory and s.priority_score > 0]
+    all_in_territory = [s for s in report.top_signals if s.is_in_territory]
     if in_territory:
-        print(f"  TOP SIGNALS IN TERRITORY ({len(in_territory)} funds):")
-        print(f"  {'Score':>5}  {'Fund':52s}  {'Size':>10}  {'Platforms'}")
+        print(f"  TOP SIGNALS IN TERRITORY ({len(in_territory)} actionable / {len(all_in_territory)} total):")
+        print(f"  {'Score':>5}  {'Fund':46s}  {'Size':>10}  {'States':12s}  {'Platforms'}")
         print(f"  {divider}")
         for sig in in_territory[:15]:
-            size = f"${sig.offering_size_m}M" if sig.offering_size_m else "unknown"
+            size = f"${sig.offering_size_m}M" if sig.offering_size_m else "size TBD"
             platforms = ", ".join(sig.known_platforms or sig.platforms[:2]) or "—"
-            print(f"  {sig.priority_score:>5.1f}  {sig.fund_name:52s}  {size:>10}  {platforms}")
+            states = ",".join(sig.solicitation_states[:4]) or sig.fund_state or "—"
+            print(f"  {sig.priority_score:>5.1f}  {sig.fund_name:46s}  {size:>10}  {states:12s}  {platforms}")
+    elif all_in_territory:
+        print(f"  {len(all_in_territory)} fund(s) in territory — none with scored signals yet (no platform data disclosed).")
     else:
         print("  No signals matched this territory in this period.")
 
