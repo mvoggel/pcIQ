@@ -65,7 +65,35 @@ def upsert_filing(filing: FormDFiling, entity_id: int | None = None) -> int:
         .upsert(row, on_conflict="accession_no")
         .execute()
     )
-    return result.data[0]["id"]
+    filing_id = result.data[0]["id"]
+
+    # Write sales compensation recipients (platform signals)
+    if filing.sales_recipients:
+        upsert_fund_platforms(filing_id, filing.sales_recipients)
+
+    return filing_id
+
+
+def upsert_fund_platforms(filing_id: int, recipients) -> None:
+    """
+    Upsert all sales compensation recipients for a filing.
+    Idempotent on (filing_id, platform_name).
+    """
+    db = get_db()
+    rows = [
+        {
+            "filing_id": filing_id,
+            "platform_name": r.name,
+            "crd_number": r.crd_number or None,
+            "is_known_platform": r.is_known_platform,
+            "states": r.states_of_solicitation or [],
+            "all_states": r.all_states,
+        }
+        for r in recipients
+        if r.is_valid
+    ]
+    if rows:
+        db.table("fund_platforms").upsert(rows, on_conflict="filing_id,platform_name").execute()
 
 
 def upsert_ria(ria: RIA, entity_id: int | None = None) -> int:

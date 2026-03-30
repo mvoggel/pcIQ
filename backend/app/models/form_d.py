@@ -52,6 +52,41 @@ class RelatedPerson(BaseModel):
         return f"{self.first_name} {self.last_name}".strip()
 
 
+# Known private markets platforms — used to flag high-value distribution signals
+KNOWN_PLATFORMS = {
+    "icapital", "cais", "altigo", "artivest", "moonfare",
+    "yield street", "yieldstreet", "cadre", "fundrise",
+    "morgan stanley", "merrill lynch", "ubs", "wells fargo advisors",
+    "raymond james", "lpl financial", "ameriprise",
+}
+
+
+class SalesCompensationRecipient(BaseModel):
+    """
+    A broker-dealer or platform that received compensation for distributing
+    this fund to investors. Extracted from Form D salesCompensationList.
+
+    This is the key distribution signal: if iCapital appears here,
+    the fund was distributed through RIAs on iCapital's platform.
+    """
+    name: str = ""
+    crd_number: str = ""
+    associated_bd_name: str = ""
+    city: str = ""
+    state_or_country: str = ""
+    states_of_solicitation: list[str] = Field(default_factory=list)  # 2-letter state codes
+    all_states: bool = False  # True if solicited in all US jurisdictions
+
+    @property
+    def is_known_platform(self) -> bool:
+        name_lower = self.name.lower()
+        return any(p in name_lower for p in KNOWN_PLATFORMS)
+
+    @property
+    def is_valid(self) -> bool:
+        return bool(self.name and self.name.lower() not in ("none", ""))
+
+
 class OfferingAmounts(BaseModel):
     total_offering_amount: float | None = None
     total_amount_sold: float | None = None
@@ -101,6 +136,9 @@ class FormDFiling(BaseModel):
     # Related persons (GPs / fund managers)
     related_persons: list[RelatedPerson] = Field(default_factory=list)
 
+    # Distribution platforms (from salesCompensationList) — THE key signal
+    sales_recipients: list[SalesCompensationRecipient] = Field(default_factory=list)
+
     # Raw fields for debugging / future enrichment
     federal_exemptions: list[str] = Field(default_factory=list)
     is_amendment: bool = False
@@ -145,3 +183,23 @@ class FormDFiling(BaseModel):
         if self.offering.total_offering_amount is None:
             return None
         return round(self.offering.total_offering_amount / 1_000_000, 2)
+
+    @property
+    def platform_names(self) -> list[str]:
+        """Names of all distribution platforms/BDs in this filing."""
+        return [r.name for r in self.sales_recipients if r.is_valid]
+
+    @property
+    def known_platform_names(self) -> list[str]:
+        """Only the recognized major platforms (iCapital, CAIS, etc.)."""
+        return [r.name for r in self.sales_recipients if r.is_valid and r.is_known_platform]
+
+    @property
+    def all_solicitation_states(self) -> set[str]:
+        """Union of all states across all sales recipients."""
+        states: set[str] = set()
+        for r in self.sales_recipients:
+            if r.all_states:
+                return {"ALL"}
+            states.update(r.states_of_solicitation)
+        return states

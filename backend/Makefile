@@ -28,5 +28,12 @@ ingest-adv-crd:
 ingest-adv-state:
 	$(PYTHON) -m app.ingestion.run_adv --state $(STATE) --max 50
 
+# Signal reports — territory intelligence
+signals:
+	$(PYTHON) -m app.signals.run_signals --days 7
+
+signals-northeast:
+	$(PYTHON) -m app.signals.run_signals --days 7 --territory Northeast
+
 test:
 	pytest tests/ -v

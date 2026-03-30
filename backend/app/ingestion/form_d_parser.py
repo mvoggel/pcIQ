@@ -15,6 +15,8 @@ Key XML paths:
   offeringData/offeringSalesAmounts/{totalOfferingAmount,totalAmountSold}
   offeringData/investors/totalNumberAlreadyInvested
   relatedPersonsList/relatedPersonInfo/...
+  offeringData/salesCompensationList/recipient/{recipientName,recipientCRDNumber,
+    statesOfSolicitationList/state}
 """
 
 import xml.etree.ElementTree as ET
@@ -25,6 +27,7 @@ from app.models.form_d import (
     IssuerAddress,
     OfferingAmounts,
     RelatedPerson,
+    SalesCompensationRecipient,
 )
 
 
@@ -141,6 +144,9 @@ def parse_form_d(xml_str: str, cik: str, accession_no: str) -> FormDFiling:
         if el.text
     ]
 
+    # --- Sales compensation recipients (distribution platforms / BDs) ---
+    sales_recipients = _parse_sales_recipients(offering)
+
     return FormDFiling(
         cik=cik,
         accession_no=accession_no,
@@ -148,6 +154,7 @@ def parse_form_d(xml_str: str, cik: str, accession_no: str) -> FormDFiling:
         address=address,
         phone=phone,
         related_persons=related_persons,
+        sales_recipients=sales_recipients,
         industry_group_type=industry_group_type,
         investment_fund_type=investment_fund_type,
         is_amendment=is_amendment,
@@ -157,3 +164,74 @@ def parse_form_d(xml_str: str, cik: str, accession_no: str) -> FormDFiling:
         has_non_accredited_investors=has_non_accredited,
         federal_exemptions=federal_exemptions,
     )
+
+
+def _parse_sales_recipients(offering: ET.Element | None) -> list[SalesCompensationRecipient]:
+    """
+    Extract all broker-dealer / platform recipients from salesCompensationList.
+
+    XML structure (confirmed from live filings):
+      <salesCompensationList>
+        <recipient>
+          <recipientName>iCapital Securities LLC</recipientName>
+          <recipientCRDNumber>12345</recipientCRDNumber>
+          <associatedBDName>...</associatedBDName>
+          <recipientAddress>
+            <city>NEW YORK</city>
+            <stateOrCountry>NY</stateOrCountry>
+          </recipientAddress>
+          <statesOfSolicitationList>
+            <state>NY</state>
+            <state>CA</state>
+          </statesOfSolicitationList>
+          <foreignSolicitation>false</foreignSolicitation>
+        </recipient>
+      </salesCompensationList>
+
+    Note: "None" appears as a literal string in some fields — we treat it as empty.
+    """
+    if offering is None:
+        return []
+
+    recipients: list[SalesCompensationRecipient] = []
+    for rec in offering.findall(".//salesCompensationList/recipient"):
+        name = _text(rec, "recipientName")
+        if not name or name.lower() == "none":
+            continue
+
+        crd = _text(rec, "recipientCRDNumber")
+        if crd.lower() == "none":
+            crd = ""
+
+        bd_name = _text(rec, "associatedBDName")
+        if bd_name.lower() == "none":
+            bd_name = ""
+
+        addr = rec.find("recipientAddress")
+        city  = _text(addr, "city").title()
+        state = _text(addr, "stateOrCountry").upper()
+
+        # States of solicitation — list of <state>XX</state> elements
+        sol_list = rec.find("statesOfSolicitationList")
+        states: list[str] = []
+        all_states = False
+        if sol_list is not None:
+            for s in sol_list.findall("state"):
+                val = (s.text or "").strip().upper()
+                if val in ("54", "ALL"):       # "54" = all US jurisdictions in EDGAR
+                    all_states = True
+                    break
+                if len(val) == 2:
+                    states.append(val)
+
+        recipients.append(SalesCompensationRecipient(
+            name=name,
+            crd_number=crd,
+            associated_bd_name=bd_name,
+            city=city,
+            state_or_country=state,
+            states_of_solicitation=states,
+            all_states=all_states,
+        ))
+
+    return recipients

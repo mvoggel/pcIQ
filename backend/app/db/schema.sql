@@ -84,6 +84,29 @@ CREATE INDEX IF NOT EXISTS rias_aum_idx       ON rias (aum DESC);
 
 
 -- -----------------------------------------------------------------------
+-- fund_platforms
+-- Links a Form D filing to the broker-dealers / platforms distributing it.
+-- Sourced from Form D salesCompensationList — the direct distribution signal.
+-- "Blue Owl Fund IV is being sold via iCapital in NY, CA, TX."
+-- -----------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS fund_platforms (
+    id              BIGSERIAL PRIMARY KEY,
+    filing_id       BIGINT NOT NULL REFERENCES form_d_filings(id) ON DELETE CASCADE,
+    platform_name   TEXT NOT NULL,
+    crd_number      TEXT,
+    is_known_platform BOOLEAN DEFAULT FALSE,
+    states          TEXT[],          -- 2-letter state codes where soliciting
+    all_states      BOOLEAN DEFAULT FALSE,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (filing_id, platform_name)
+);
+
+CREATE INDEX IF NOT EXISTS fund_platforms_filing_idx   ON fund_platforms (filing_id);
+CREATE INDEX IF NOT EXISTS fund_platforms_name_idx     ON fund_platforms (platform_name);
+CREATE INDEX IF NOT EXISTS fund_platforms_known_idx    ON fund_platforms (is_known_platform);
+
+
+-- -----------------------------------------------------------------------
 -- ria_fund_allocations
 -- Links an RIA to a Form D filing — i.e., evidence that the RIA
 -- allocated capital to this fund. This is the core signal table.
