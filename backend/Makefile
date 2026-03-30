@@ -19,5 +19,14 @@ ingest:
 ingest-dry:
 	$(PYTHON) -m app.ingestion.run --dry-run
 
+# ADV / RIA ingestion — examples:
+#   make ingest-adv-crd CRD=173333        (iCapital)
+#   make ingest-adv-state STATE=NY
+ingest-adv-crd:
+	$(PYTHON) -m app.ingestion.run_adv --crd $(CRD)
+
+ingest-adv-state:
+	$(PYTHON) -m app.ingestion.run_adv --state $(STATE) --max 50
+
 test:
 	pytest tests/ -v

@@ -4,10 +4,12 @@ DB write layer — persists parsed filings and resolved entities to Supabase.
 All writes use upsert so the ingestion job is safe to re-run (idempotent).
   - entities:        upsert on canonical_name
   - form_d_filings:  upsert on accession_no (unique per filing)
+  - rias:            upsert on crd_number (stable FINRA identifier)
 """
 
 from app.db.client import get_db
 from app.models.form_d import FormDFiling
+from app.models.ria import RIA
 
 
 def upsert_entity(canonical_name: str, cik: str = "", entity_type: str = "fund") -> int:
@@ -61,6 +63,36 @@ def upsert_filing(filing: FormDFiling, entity_id: int | None = None) -> int:
     result = (
         db.table("form_d_filings")
         .upsert(row, on_conflict="accession_no")
+        .execute()
+    )
+    return result.data[0]["id"]
+
+
+def upsert_ria(ria: RIA, entity_id: int | None = None) -> int:
+    """
+    Upsert an RIA record. Idempotent on crd_number.
+    Returns the RIA's DB id.
+    """
+    db = get_db()
+    row = {
+        "crd_number": ria.crd_number,
+        "cik": ria.cik or None,
+        "firm_name": ria.firm_name,
+        "entity_id": entity_id,
+        "aum": ria.aum,
+        "private_fund_aum": ria.private_fund_aum,
+        "total_accounts": ria.num_accounts,
+        "num_advisors": ria.num_investment_advisors,
+        "city": ria.city or None,
+        "state": ria.state or None,
+        "zip_code": ria.zip_code or None,
+        "website": ria.website or None,
+        "is_active": True,
+        "adv_filed_at": ria.adv_filed_at.isoformat() if ria.adv_filed_at else None,
+    }
+    result = (
+        db.table("rias")
+        .upsert(row, on_conflict="crd_number")
         .execute()
     )
     return result.data[0]["id"]
