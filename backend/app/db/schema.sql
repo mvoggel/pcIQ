@@ -10,7 +10,7 @@
 -- -----------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS entities (
     id              BIGSERIAL PRIMARY KEY,
-    canonical_name  TEXT NOT NULL,
+    canonical_name  TEXT NOT NULL UNIQUE,
     cik             TEXT,                        -- SEC CIK, if known
     entity_type     TEXT,                        -- 'fund', 'ria', 'gp', 'platform'
     created_at      TIMESTAMPTZ DEFAULT NOW(),
