@@ -32,6 +32,57 @@ from datetime import date
 from app.models.ria import RIA
 
 
+def parse_edgar_submissions(data: dict, crd_number: str = "") -> RIA | None:
+    """
+    Parse EDGAR submissions JSON (data.sec.gov) into a minimal RIA record.
+    Less rich than IAPD — gives us name, CIK, state, and filing dates.
+    Used as fallback when IAPD is unavailable.
+    """
+    if not data:
+        return None
+
+    firm_name = (data.get("name") or "").strip()
+    if not firm_name:
+        return None
+
+    cik = str(data.get("cik") or "").strip()
+    state = str(data.get("stateOfIncorporation") or "").strip().upper()[:2]
+    city = ""
+    zip_code = ""
+
+    # addresses block
+    addresses = data.get("addresses") or {}
+    biz = addresses.get("business") or {}
+    city = (biz.get("city") or "").strip().title()
+    state = state or (biz.get("stateOrCountry") or "").strip().upper()[:2]
+    zip_code = str(biz.get("zipCode") or "").strip()
+    website = (data.get("website") or "").strip()
+
+    # Most recent ADV filing date
+    filings = data.get("filings", {}).get("recent", {})
+    forms = filings.get("form", [])
+    dates = filings.get("filingDate", [])
+    filed_at = None
+    for form, d in zip(forms, dates):
+        if "ADV" in str(form).upper():
+            filed_at = _to_date(d)
+            break
+
+    if not crd_number:
+        crd_number = str(data.get("crdNumber") or "")
+
+    return RIA(
+        crd_number=crd_number,
+        cik=cik,
+        firm_name=firm_name,
+        city=city,
+        state=state,
+        zip_code=zip_code,
+        website=website,
+        adv_filed_at=filed_at,
+    )
+
+
 def parse_iapd_firm(data: dict, crd_number: str) -> RIA | None:
     """
     Parse IAPD firm detail JSON into an RIA model.

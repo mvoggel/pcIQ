@@ -19,22 +19,42 @@ import argparse
 import asyncio
 
 from app.db.writer import upsert_entity, upsert_ria
-from app.ingestion.adv_client import fetch_iapd_search, fetch_ria_by_crd, search_adv_filers
-from app.ingestion.adv_parser import parse_iapd_firm
+from app.ingestion.adv_client import (
+    fetch_edgar_submissions,
+    fetch_iapd_search,
+    fetch_ria_by_crd,
+    search_adv_filers,
+)
+from app.ingestion.adv_parser import parse_edgar_submissions, parse_iapd_firm
 from app.ingestion.entity_resolver import EntityResolver
+
+
+async def _fetch_ria(crd: str, cik: str = "") -> "RIA | None":
+    """Try IAPD first, fall back to EDGAR submissions."""
+    from app.models.ria import RIA
+
+    # Attempt 1: IAPD (rich data — AUM, accounts, state)
+    data = await fetch_ria_by_crd(crd)
+    if data:
+        ria = parse_iapd_firm(data, crd_number=crd)
+        if ria:
+            return ria
+
+    # Attempt 2: EDGAR submissions (name, CIK, state, filing dates)
+    if cik:
+        submissions = await fetch_edgar_submissions(cik)
+        if submissions:
+            return parse_edgar_submissions(submissions, crd_number=crd)
+
+    return None
 
 
 async def run_by_crd(crd: str, dry_run: bool = False) -> None:
     """Fetch and upsert a single RIA by CRD number."""
-    print(f"\nFetching RIA CRD {crd} from IAPD...")
-    data = await fetch_ria_by_crd(crd)
-    if not data:
-        print(f"  ✗  CRD {crd} not found.")
-        return
-
-    ria = parse_iapd_firm(data, crd_number=crd)
+    print(f"\nFetching RIA CRD {crd}...")
+    ria = await _fetch_ria(crd)
     if not ria:
-        print(f"  ✗  Could not parse CRD {crd}.")
+        print(f"  ✗  CRD {crd} not found via IAPD or EDGAR.")
         return
 
     aum_str = f"${ria.aum_m}M AUM" if ria.aum_m else "AUM unknown"
