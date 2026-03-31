@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import AppHeader from "@/components/AppHeader";
 import TerritoryTabs from "@/components/TerritoryTabs";
 import SignalTable from "@/components/SignalTable";
 import PlatformPanel from "@/components/PlatformPanel";
@@ -41,30 +42,26 @@ export default function SignalsPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-lg font-bold tracking-tight">pcIQ</span>
-          <span className="text-slate-500 text-sm">|</span>
-          <span className="text-slate-400 text-sm">Private Credit Intelligence</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <span className="text-slate-500 text-xs mr-2">Lookback</span>
-          {DAY_OPTIONS.map((d) => (
-            <button
-              key={d}
-              onClick={() => setDays(d)}
-              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                days === d
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-400 hover:text-white hover:bg-slate-700"
-              }`}
-            >
-              {d}d
-            </button>
-          ))}
-        </div>
-      </header>
+      <AppHeader
+        rightSlot={
+          <div className="flex items-center gap-1">
+            <span className="text-slate-500 text-xs mr-2">Lookback</span>
+            {DAY_OPTIONS.map((d) => (
+              <button
+                key={d}
+                onClick={() => setDays(d)}
+                className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                  days === d
+                    ? "bg-blue-600 text-white"
+                    : "text-slate-400 hover:text-white hover:bg-slate-700"
+                }`}
+              >
+                {d}d
+              </button>
+            ))}
+          </div>
+        }
+      />
 
       {/* Territory tabs */}
       <TerritoryTabs territories={TERRITORIES} active={territory} onChange={setTerritory} />

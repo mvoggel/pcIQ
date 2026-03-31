@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.cion import router as cion_router
+from app.api.fund import router as fund_router
 from app.api.signals import router as signals_router
 
 app = FastAPI(
@@ -22,6 +24,8 @@ app.add_middleware(
 )
 
 app.include_router(signals_router)
+app.include_router(fund_router)
+app.include_router(cion_router)
 
 
 @app.get("/health")

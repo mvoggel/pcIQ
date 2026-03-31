@@ -21,3 +21,59 @@ export interface SignalsResponse {
   platform_counts: Record<string, number>;
   signals: Signal[];
 }
+
+export interface CionFund {
+  ticker: string;
+  name: string;
+  strategy: string;
+  focus: string;
+  exchange: string;
+  currency: string;
+  nav: number | null;
+  nav_prev_close: number | null;
+  nav_change: number | null;
+  nav_change_pct: number | null;
+  fifty_two_week_change_pct: number | null;
+  fifty_two_week_high: number | null;
+  fifty_two_week_low: number | null;
+  fifty_day_avg: number | null;
+  two_hundred_day_avg: number | null;
+  sparkline: number[];
+  error?: string;
+}
+
+export interface ManagerIntelligence {
+  crd: string;
+  firm_name: string;
+  sec_number: string;
+  scope: string;           // "ACTIVE" | "INACTIVE"
+  city: string;
+  state: string;
+  phone: string;
+  branches: number | null;
+  relying_advisers: number;
+  iapd_url: string;
+  search_query: string;
+}
+
+export interface FundEnrichment {
+  cik: string;
+  accession_no: string;
+  entity_name: string;
+  investment_fund_type: string;
+  filed_at: string | null;
+  date_of_first_sale: string | null;
+  is_amendment: boolean;
+  city: string | null;
+  state_or_country: string | null;
+  total_offering_amount: number | null;
+  total_amount_sold: number | null;
+  total_investors: number | null;
+  has_non_accredited: boolean;
+  exemptions: { code: string; label: string }[];
+  related_persons: { name: string; relationships: string[] }[];
+  website: string;
+  phone: string;
+  sic_description: string;
+  manager_intelligence: ManagerIntelligence | null;
+}

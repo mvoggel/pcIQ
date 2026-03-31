@@ -6,5 +6,6 @@ pydantic-settings>=2.7.0
 python-dotenv>=1.0.0
 supabase>=2.7.0
 tenacity>=8.3.0
+yfinance>=0.2.50
 
 # psycopg2 and sqlalchemy added back in week 3-4 when we write to Supabase directly
