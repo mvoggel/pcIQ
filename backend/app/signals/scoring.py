@@ -28,6 +28,8 @@ class TerritorySignal:
     platforms: list[str]                     # distribution platforms
     known_platforms: list[str]               # iCapital, CAIS, etc.
     solicitation_states: list[str]           # states being targeted
+    cik: str = ""
+    accession_no: str = ""
     is_in_territory: bool = False
     priority_score: float = 0.0              # 0.0–10.0
 
@@ -112,6 +114,8 @@ def score_filing(filing: FormDFiling, territory_states: set[str]) -> TerritorySi
         platforms=filing.platform_names,
         known_platforms=filing.known_platform_names,
         solicitation_states=sorted(sol_states - {"ALL"}),
+        cik=filing.cik,
+        accession_no=filing.accession_no,
         is_in_territory=in_territory,
         priority_score=round(min(score, 10.0), 1),
     )
