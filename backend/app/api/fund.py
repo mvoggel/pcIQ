@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.config import settings
 from app.db.client import get_db
+from app.ingestion.adv_pdf_parser import fetch_adv_data
 from app.ingestion.edgar_client import fetch_form_d_xml
 from app.ingestion.form_d_parser import parse_form_d
 
@@ -195,7 +196,8 @@ async def _search_iapd_manager(entity_name: str) -> dict | None:
                 "phone": phone,
                 "branches": int(branches) if branches is not None else None,
                 "relying_advisers": relying_count,
-                "iapd_url": f"https://www.adviserinfo.sec.gov/IAPD/IAPDFirmSummary.aspx?oid={crd}",
+                "iapd_url": f"https://adviserinfo.sec.gov/firm/summary/{crd}",
+                "adv_pdf_url": f"https://reports.adviserinfo.sec.gov/reports/ADV/{crd}/PDF/{crd}.pdf",
                 "search_query": query,
             }
     except Exception:
@@ -240,7 +242,7 @@ async def get_fund_detail(cik: str, accession_no: str) -> dict:
 
     entity_name = row["entity_name"] or ""
 
-    # 2. Fetch XML + submissions + IAPD in parallel
+    # 2. Fetch XML + submissions + IAPD search (all parallel, ADV PDF added below)
     xml_task  = asyncio.create_task(fetch_form_d_xml(cik, accession_no))
     sub_task  = asyncio.create_task(_fetch_submissions(cik))
     iapd_task = asyncio.create_task(_search_iapd_manager(entity_name))
@@ -262,6 +264,26 @@ async def get_fund_detail(cik: str, accession_no: str) -> dict:
 
     submissions = await sub_task
     manager_intelligence = await iapd_task
+
+    # 3. If IAPD match found, fetch the ADV PDF for AUM + client data (in parallel with await)
+    adv_data = None
+    if manager_intelligence and manager_intelligence.get("crd"):
+        adv_data = await fetch_adv_data(manager_intelligence["crd"], timeout=12.0)
+        if adv_data:
+            manager_intelligence["aum"] = adv_data.total_aum
+            manager_intelligence["discretionary_aum"] = adv_data.discretionary_aum
+            manager_intelligence["total_clients"] = adv_data.total_clients
+            manager_intelligence["total_employees"] = adv_data.total_employees
+            manager_intelligence["investment_advisory_employees"] = adv_data.investment_advisory_employees
+            manager_intelligence["client_types"] = [
+                {
+                    "label": label,
+                    "clients": vals.get("clients"),
+                    "aum": vals.get("aum"),
+                }
+                for label, vals in adv_data.client_types.items()
+            ]
+            manager_intelligence["adv_as_of"] = adv_data.pdf_url
     website = (submissions.get("website") or "").strip()
     phone = (submissions.get("phone") or "").strip()
     sic_desc = (submissions.get("sicDescription") or "").strip()

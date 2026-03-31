@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FundEnrichment, ManagerIntelligence, Signal } from "@/lib/types";
+import { ClientType, FundEnrichment, ManagerIntelligence, Signal } from "@/lib/types";
 import { fetchFundDetail } from "@/lib/api";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -119,74 +119,111 @@ function RaiseProgress({
   );
 }
 
+function fmtAum(n: number | null | undefined): string {
+  if (n == null) return "—";
+  if (n >= 1_000_000_000_000) return `$${(n / 1_000_000_000_000).toFixed(2)}T`;
+  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)}B`;
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  return `$${n.toLocaleString()}`;
+}
+
+function ClientTypeBar({ ct }: { ct: ClientType }) {
+  return (
+    <div className="flex items-center justify-between text-xs py-1 border-b border-slate-100 last:border-0">
+      <span className="text-slate-600 truncate pr-3 flex-1">{ct.label}</span>
+      <span className="text-slate-500 text-right whitespace-nowrap">
+        {ct.clients != null && <span className="mr-2">{ct.clients} {ct.clients === 1 ? "client" : "clients"}</span>}
+        {ct.aum != null && <span className="font-medium text-slate-800">{fmtAum(ct.aum)}</span>}
+      </span>
+    </div>
+  );
+}
+
 function ManagerCard({ mgr }: { mgr: ManagerIntelligence }) {
   const isActive = mgr.scope?.toUpperCase() === "ACTIVE";
+  const hasAdv = mgr.aum != null || (mgr.client_types && mgr.client_types.length > 0);
 
   return (
-    <div className="border border-slate-200 rounded-lg p-4 bg-slate-50 space-y-3">
-      {/* Header row */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-sm font-semibold text-slate-800 leading-tight">{mgr.firm_name}</p>
-            {mgr.scope && (
-              <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
-                isActive
-                  ? "bg-emerald-100 text-emerald-700"
-                  : "bg-slate-100 text-slate-500"
-              }`}>
-                {mgr.scope}
-              </span>
-            )}
+    <div className="border border-slate-200 rounded-lg overflow-hidden">
+      {/* Header */}
+      <div className="px-4 pt-3 pb-2 bg-slate-50 border-b border-slate-100">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm font-semibold text-slate-800">{mgr.firm_name}</p>
+              {mgr.scope && (
+                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                  isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                }`}>
+                  {mgr.scope}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              CRD #{mgr.crd}
+              {mgr.sec_number && <span className="ml-2">· SEC {mgr.sec_number}</span>}
+              {mgr.city && mgr.state && <span className="ml-2">· {mgr.city}, {mgr.state}</span>}
+            </p>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
-            CRD #{mgr.crd}
-            {mgr.sec_number && <span className="ml-2">· SEC {mgr.sec_number}</span>}
-            {mgr.city && mgr.state && (
-              <span className="ml-2">· {mgr.city}, {mgr.state}</span>
-            )}
-          </p>
+          <div className="flex gap-1.5 shrink-0">
+            <a href={mgr.iapd_url} target="_blank" rel="noopener noreferrer"
+              className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 bg-blue-50 rounded px-2 py-1 whitespace-nowrap">
+              IAPD →
+            </a>
+            <a href={mgr.adv_pdf_url} target="_blank" rel="noopener noreferrer"
+              className="text-xs text-slate-500 hover:text-slate-700 border border-slate-200 bg-white rounded px-2 py-1 whitespace-nowrap">
+              ADV PDF →
+            </a>
+          </div>
         </div>
-        <a
-          href={mgr.iapd_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="shrink-0 text-xs text-blue-600 hover:text-blue-800 border border-blue-200 bg-blue-50 rounded px-2 py-1 whitespace-nowrap"
-        >
-          Full Profile →
-        </a>
       </div>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-3 gap-2 text-center">
-        <div className="bg-white rounded border border-slate-100 px-2 py-2">
-          <p className="text-xs text-slate-400 mb-0.5">Relying Advisers</p>
-          <p className="text-sm font-semibold text-slate-800">
-            {mgr.relying_advisers > 0 ? mgr.relying_advisers : "—"}
-          </p>
-        </div>
-        <div className="bg-white rounded border border-slate-100 px-2 py-2">
-          <p className="text-xs text-slate-400 mb-0.5">Offices</p>
-          <p className="text-sm font-semibold text-slate-800">
-            {mgr.branches != null ? mgr.branches : "—"}
-          </p>
-        </div>
-        <div className="bg-white rounded border border-slate-100 px-2 py-2">
+      {/* Key stats */}
+      <div className="grid grid-cols-4 divide-x divide-slate-100 bg-white text-center">
+        <div className="px-2 py-2.5">
           <p className="text-xs text-slate-400 mb-0.5">AUM</p>
-          <a
-            href={mgr.iapd_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-blue-600 hover:underline"
-          >
-            See IAPD →
-          </a>
+          <p className="text-sm font-bold text-slate-900">{fmtAum(mgr.aum)}</p>
+        </div>
+        <div className="px-2 py-2.5">
+          <p className="text-xs text-slate-400 mb-0.5">Clients</p>
+          <p className="text-sm font-bold text-slate-900">
+            {mgr.total_clients != null ? mgr.total_clients.toLocaleString() : "—"}
+          </p>
+        </div>
+        <div className="px-2 py-2.5">
+          <p className="text-xs text-slate-400 mb-0.5">Employees</p>
+          <p className="text-sm font-bold text-slate-900">
+            {mgr.total_employees != null ? mgr.total_employees : "—"}
+          </p>
+        </div>
+        <div className="px-2 py-2.5">
+          <p className="text-xs text-slate-400 mb-0.5">Advisors</p>
+          <p className="text-sm font-bold text-slate-900">
+            {mgr.investment_advisory_employees != null ? mgr.investment_advisory_employees : "—"}
+          </p>
         </div>
       </div>
 
-      <p className="text-xs text-slate-400 leading-relaxed">
-        Matched via IAPD search for &ldquo;{mgr.search_query}&rdquo;. Verify this is the correct adviser — click Full Profile to see AUM, client count, and more.
-      </p>
+      {/* Client type breakdown */}
+      {mgr.client_types && mgr.client_types.length > 0 && (
+        <div className="px-4 py-3 border-t border-slate-100 bg-white">
+          <p className="text-xs uppercase tracking-wider text-slate-400 mb-2">AUM by Client Type</p>
+          {mgr.client_types.map((ct) => (
+            <ClientTypeBar key={ct.label} ct={ct} />
+          ))}
+        </div>
+      )}
+
+      {/* Footer note */}
+      <div className="px-4 py-2 bg-slate-50 border-t border-slate-100">
+        <p className="text-xs text-slate-400">
+          {hasAdv
+            ? "Source: Form ADV Part 1A · SEC IAPD"
+            : `Matched via IAPD search for "${mgr.search_query}" — click IAPD for full detail`
+          }
+          {!hasAdv && " · Verify this is the correct adviser"}
+        </p>
+      </div>
     </div>
   );
 }

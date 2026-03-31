@@ -42,6 +42,12 @@ export interface CionFund {
   error?: string;
 }
 
+export interface ClientType {
+  label: string;
+  clients: number | null;
+  aum: number | null;
+}
+
 export interface ManagerIntelligence {
   crd: string;
   firm_name: string;
@@ -53,7 +59,15 @@ export interface ManagerIntelligence {
   branches: number | null;
   relying_advisers: number;
   iapd_url: string;
+  adv_pdf_url: string;
   search_query: string;
+  // ADV PDF data (populated when available)
+  aum: number | null;
+  discretionary_aum: number | null;
+  total_clients: number | null;
+  total_employees: number | null;
+  investment_advisory_employees: number | null;
+  client_types: ClientType[];
 }
 
 export interface FundEnrichment {
