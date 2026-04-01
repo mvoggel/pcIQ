@@ -10,10 +10,11 @@ export async function fetchCionFunds(): Promise<CionFund[]> {
 
 export async function fetchFundDetail(
   cik: string,
-  accessionNo: string
+  accessionNo: string,
+  signal?: AbortSignal
 ): Promise<FundEnrichment> {
   const url = `${API_BASE}/api/fund/${cik}/${encodeURIComponent(accessionNo)}`;
-  const res = await fetch(url, { cache: "no-store" });
+  const res = await fetch(url, { cache: "no-store", signal });
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();
 }

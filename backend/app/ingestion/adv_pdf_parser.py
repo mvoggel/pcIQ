@@ -19,9 +19,11 @@ so field labels and table positions are consistent.
 
 from __future__ import annotations
 
+import asyncio
 import io
 import re
 from dataclasses import dataclass, field
+from functools import partial
 
 import httpx
 import pdfplumber
@@ -87,10 +89,20 @@ def _to_int(s: str) -> int | None:
         return None
 
 
+_ADV_MAX_PAGES = 35  # Items 5.A/B/D/F always appear in the first section of Part 1A
+
+
 def _extract_all_text(pdf_bytes: bytes) -> str:
-    """Extract full text from all PDF pages into a single string."""
+    """Extract text from the first _ADV_MAX_PAGES pages.
+
+    Form ADV Part 1A is standardised — Items 5.A, 5.B, 5.D, and 5.F
+    (employees, client types, AUM) always fall within the first ~25 pages.
+    Parsing the full document for a large manager (200+ pages) was taking
+    30-45 s; capping at 35 pages keeps it under 2 s.
+    """
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        return "\n".join(page.extract_text() or "" for page in pdf.pages)
+        pages = pdf.pages[:_ADV_MAX_PAGES]
+        return "\n".join(page.extract_text() or "" for page in pages)
 
 
 def _parse_item5_aum(text: str) -> tuple[float | None, float | None, float | None, int | None]:
@@ -239,6 +251,8 @@ async def fetch_adv_data(crd: str, timeout: float = 12.0) -> ADVData | None:
             resp = await client.get(url, headers=_HEADERS)
             if resp.status_code != 200:
                 return None
-            return parse_adv_pdf(crd, resp.content)
+        # Run CPU-bound PDF parse in a thread pool so it doesn't block the event loop
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, partial(parse_adv_pdf, crd, resp.content))
     except Exception:
         return None
