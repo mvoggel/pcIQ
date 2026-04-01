@@ -156,48 +156,99 @@ async def fetch_edgar_submissions(cik: str) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
-# EDGAR EFTS — bulk ADV filer discovery
+# IAPD — bulk active-IA discovery by state
 # ---------------------------------------------------------------------------
+
+import json as _json
+
+
+def _parse_iapd_addr(addr_json: str) -> tuple[str, str]:
+    """Parse IAPD firm_ia_address_details → (city, state)."""
+    if not addr_json:
+        return ("", "")
+    try:
+        d = _json.loads(addr_json)
+        office = d.get("officeAddress") or {}
+        city  = str(office.get("city")  or "").strip().title()
+        state = str(office.get("state") or "").strip().upper()
+        return (city, state)
+    except Exception:
+        return ("", "")
+
 
 async def search_adv_filers(
     state: str | None = None,
     max_results: int = 100,
 ) -> list[dict]:
     """
-    Search EDGAR for ADV filers. Returns list of filing metadata dicts.
+    Search IAPD for active investment advisers in a state.
+
+    Uses IAPD's `state` parameter (confirmed to filter by business address state —
+    `iapd_state_cd` is silently ignored by the API). Query `'a'` is a broad single-
+    letter term that matches >95% of IA firm names (management, capital, advisors…).
+    CRDs are included in search results — no secondary name→CRD lookup needed.
+
+    Returns list of dicts: {crd, entity_name, state, city}.
 
     Args:
-        state:       2-letter state code to filter by (used as query term)
-        max_results: max records to return
+        state:       2-letter state code (e.g. "NY")
+        max_results: max records to return (IAPD caps each page at 100)
     """
-    url = f"{EFTS_BASE}/LATEST/search-index"
+    if not state:
+        return []
+
+    url = f"{IAPD_BASE}/search/firm"
     results: list[dict] = []
-    from_offset = 0
+    seen_crds: set[str] = set()
+    batch = min(100, max_results)
 
     async with httpx.AsyncClient() as client:
+        start = 0
         while len(results) < max_results:
             params: dict = {
-                "q": state or "",
-                "forms": "ADV",
-                "from": from_offset,
+                "query": "a",           # broad: matches >95% of IA firm names
+                "hl": "false",
+                "nrows": str(batch),
+                "start": str(start),
+                "state": state.upper(), # business address state (confirmed working)
+                "type": "IA",
+                "ia_scope": "A",        # active registrants only
             }
-            data = await _get(client, url, headers=_EDGAR_HEADERS, params=params)
+            try:
+                data = await _get(client, url, headers=_IAPD_HEADERS, params=params)
+            except Exception:
+                break
+
+            if not isinstance(data, dict):
+                break
             hits = data.get("hits", {}).get("hits", [])
             if not hits:
                 break
 
             for hit in hits:
                 src = hit.get("_source", {})
+                crd = str(src.get("firm_source_id") or "").strip()
+                if not crd or crd in seen_crds:
+                    continue
+                seen_crds.add(crd)
+                name = str(src.get("firm_name") or "").strip()
+                addr_json = (
+                    src.get("firm_ia_address_details")
+                    or src.get("firm_address_details")
+                    or ""
+                )
+                city, firm_state = _parse_iapd_addr(addr_json)
                 results.append({
-                    "entity_name": src.get("entity_name", ""),
-                    "cik": (src.get("ciks") or [""])[0],
-                    "file_id": hit.get("_id", ""),
-                    "filed_at": src.get("file_date", ""),
+                    "crd": crd,
+                    "entity_name": name,
+                    "state": firm_state or state.upper(),
+                    "city": city,
                 })
 
-            total = data.get("hits", {}).get("total", {}).get("value", 0)
-            from_offset += len(hits)
-            if from_offset >= min(total, max_results):
+            total_raw = data.get("hits", {}).get("total", {})
+            total = total_raw.get("value", 0) if isinstance(total_raw, dict) else int(total_raw or 0)
+            start += len(hits)
+            if start >= min(total, max_results):
                 break
 
     return results[:max_results]

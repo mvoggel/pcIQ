@@ -126,9 +126,9 @@ def fetch_likely_rias(
             "website, num_advisors, total_accounts"
         )
         .in_("state", states)
-        .gte("aum", min_aum)
+        .or_(f"aum.gte.{min_aum},aum.is.null")
         .eq("is_active", True)
-        .order("aum", desc=True)
+        .order("aum", desc=True, nulls_last=True)
         .limit(limit)
         .execute()
     )

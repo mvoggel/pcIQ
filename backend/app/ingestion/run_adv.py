@@ -21,12 +21,10 @@ import asyncio
 from app.db.writer import upsert_entity, upsert_ria
 from app.ingestion.adv_client import (
     fetch_edgar_submissions,
-    fetch_iapd_search,
-    fetch_ria_by_crd,
     search_adv_filers,
 )
-from app.ingestion.adv_parser import parse_edgar_submissions, parse_iapd_firm
 from app.ingestion.entity_resolver import EntityResolver
+from app.models.ria import RIA
 
 
 async def _fetch_ria(crd: str, cik: str = "") -> "RIA | None":
@@ -72,41 +70,46 @@ async def run_by_crd(crd: str, dry_run: bool = False) -> None:
 
 
 async def run_by_state(state: str, max_results: int, dry_run: bool = False) -> None:
-    """Fetch RIAs from EDGAR ADV search filtered by state."""
+    """
+    Fetch active RIAs from IAPD for a given state and write to Supabase.
+
+    IAPD search returns CRDs directly — no secondary name→CRD lookup needed.
+    For each hit we call fetch_ria_by_crd to get full data including AUM.
+    """
     print(f"\npcIQ ADV ingestion | state={state} | max={max_results}\n")
 
     hits = await search_adv_filers(state=state, max_results=max_results)
-    print(f"Found {len(hits)} ADV filers.\n")
+    print(f"Found {len(hits)} active IA registrants in {state}.\n")
+
+    if not hits:
+        print("  No results — check that IAPD is reachable and the state code is valid.")
+        return
 
     resolver = EntityResolver()
     written = 0
     errors = 0
+    skipped = 0
 
     for hit in hits:
-        cik = hit.get("cik", "")
-        name = hit.get("entity_name", "")
-
-        # Try IAPD search by name to get CRD
-        matches = await fetch_iapd_search(name)
-        if not matches:
+        crd = hit.get("crd", "")
+        name = hit.get("entity_name", "").strip()
+        if not crd or not name:
+            skipped += 1
             continue
 
-        # Take the first match — refine with fuzzy matching in Phase 2
-        match = matches[0] if isinstance(matches[0], dict) else {}
-        crd = str(match.get("crdNumber") or match.get("crd") or "").strip()
-        if not crd:
-            continue
+        # Build RIA from IAPD search data — CRD, name, state, city come from search.
+        # AUM is not available in search results (detail endpoint requires data-center IP);
+        # it will be backfilled when the fund modal fetches the ADV PDF from Railway.
+        ria = RIA(
+            crd_number=crd,
+            firm_name=name,
+            state=hit.get("state", "").upper(),
+            city=hit.get("city", ""),
+            aum=None,
+            private_fund_aum=None,
+        )
 
-        data = await fetch_ria_by_crd(crd)
-        if not data:
-            continue
-
-        ria = parse_iapd_firm(data, crd_number=crd)
-        if not ria:
-            continue
-
-        aum_str = f"${ria.aum_m}M" if ria.aum_m else "?"
-        print(f"  ✓  {ria.firm_name:50s} | {ria.state:2s} | {aum_str}")
+        print(f"  ✓  {ria.firm_name:50s} | {ria.state:2s} | AUM pending")
 
         if not dry_run:
             try:
@@ -121,7 +124,8 @@ async def run_by_state(state: str, max_results: int, dry_run: bool = False) -> N
                 errors += 1
 
     print(f"\n{'─'*70}")
-    print(f"  RIAs processed : {len(hits)}")
+    print(f"  Found           : {len(hits)}")
+    print(f"  Skipped (no data): {skipped}")
     if not dry_run:
         print(f"  Written to DB  : {written}")
         print(f"  Errors         : {errors}")
