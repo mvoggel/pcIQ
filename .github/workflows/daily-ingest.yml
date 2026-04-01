@@ -1,0 +1,31 @@
+name: Daily EDGAR ingestion
+
+on:
+  schedule:
+    # 6am ET every day (11:00 UTC) — Form D filings post overnight
+    - cron: "0 11 * * *"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Number of days to look back"
+        default: "2"
+        required: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger ingestion
+        run: |
+          DAYS="${{ github.event.inputs.days || '2' }}"
+          echo "Triggering ingestion for last ${DAYS} days..."
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.INGEST_SECRET }}" \
+            "https://pciq-production.up.railway.app/api/ingest/trigger?days=${DAYS}")
+          echo "HTTP status: $response"
+          if [ "$response" != "200" ]; then
+            echo "Ingestion trigger failed with status $response"
+            exit 1
+          fi
+          echo "Ingestion started successfully."

@@ -16,5 +16,8 @@ class Settings(BaseSettings):
     # Comma-separated allowed CORS origins — extend via env var in prod
     allowed_origins: str = "http://localhost:3000,http://localhost:3001,http://localhost:3002"
 
+    # Secret token for the /api/ingest/trigger endpoint (set in Railway env)
+    ingest_secret: str = ""
+
 
 settings = Settings()

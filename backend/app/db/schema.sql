@@ -129,6 +129,25 @@ CREATE INDEX IF NOT EXISTS ria_alloc_signal_idx  ON ria_fund_allocations (signal
 
 
 -- -----------------------------------------------------------------------
+-- adv_enrichment
+-- Cache of Form ADV data keyed by CRD number.
+-- ADV PDFs take 4-8s to download + parse; this makes the fund modal instant.
+-- TTL: 30 days (ADV data is filed annually, changes slowly).
+-- -----------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS adv_enrichment (
+    crd                         TEXT PRIMARY KEY,
+    firm_name                   TEXT,
+    total_aum                   NUMERIC,
+    discretionary_aum           NUMERIC,
+    total_clients               INT,
+    total_employees             INT,
+    investment_advisory_employees INT,
+    client_types                JSONB,   -- array of {label, clients, aum}
+    fetched_at                  TIMESTAMPTZ DEFAULT NOW()
+);
+
+
+-- -----------------------------------------------------------------------
 -- territories
 -- Wholesaler territory definitions. Each row = one territory config
 -- for one firm. Phase 1: manually seeded. Phase 2: UI-configurable.

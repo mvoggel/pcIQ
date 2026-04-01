@@ -67,7 +67,7 @@ export default function SignalsPage() {
       <TerritoryTabs territories={TERRITORIES} active={territory} onChange={setTerritory} />
 
       {/* Main content */}
-      <main className="px-6 py-6 max-w-screen-xl mx-auto">
+      <main className="px-4 sm:px-6 py-4 sm:py-6 max-w-screen-xl mx-auto">
         {loading && (
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
@@ -80,34 +80,26 @@ export default function SignalsPage() {
         {error && !loading && (
           <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-red-700 text-sm">
             <strong>Error:</strong> {error}
-            <p className="text-red-500 text-xs mt-1">
-              Make sure the FastAPI server is running: <code>cd backend && make run</code>
-            </p>
           </div>
         )}
 
         {data && !loading && (
-          <div className="flex gap-8">
-            {/* Left: platform activity */}
-            <aside className="w-52 shrink-0 pt-1">
-              <PlatformPanel platformCounts={data.platform_counts} />
-            </aside>
-
-            {/* Right: signal feed */}
-            <div className="flex-1 min-w-0">
+          <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
+            {/* Signal feed — first on mobile */}
+            <div className="flex-1 min-w-0 order-1">
               {/* Toolbar: count + search */}
-              <div className="mb-3 flex items-center gap-4">
+              <div className="mb-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
                 <div className="shrink-0">
                   <span className="font-medium text-slate-700">
                     {filteredSignals(data, query).length}
                     {query && <span className="text-slate-400"> of {data.signals.length}</span>}
                     {" "}signal{data.signals.length !== 1 ? "s" : ""} in {data.territory}
                   </span>
-                  <span className="text-slate-400 text-sm ml-2">
+                  <span className="text-slate-400 text-sm ml-2 hidden sm:inline">
                     — {data.total_filings_scanned} filings scanned over {data.days}d
                   </span>
                 </div>
-                <div className="relative flex-1 max-w-xs ml-auto">
+                <div className="relative sm:flex-1 sm:max-w-xs sm:ml-auto">
                   <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
                   </svg>
@@ -132,6 +124,11 @@ export default function SignalsPage() {
               </div>
               <SignalTable signals={filteredSignals(data, query)} />
             </div>
+
+            {/* Platform panel — sidebar on desktop, below on mobile */}
+            <aside className="w-full lg:w-52 lg:shrink-0 lg:pt-1 order-2">
+              <PlatformPanel platformCounts={data.platform_counts} />
+            </aside>
           </div>
         )}
       </main>

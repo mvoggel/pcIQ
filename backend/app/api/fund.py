@@ -15,6 +15,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 
 from app.config import settings
+from app.db.adv_cache import get_cached_adv, set_cached_adv
 from app.db.client import get_db
 from app.ingestion.adv_pdf_parser import fetch_adv_data
 from app.ingestion.edgar_client import fetch_form_d_xml
@@ -265,10 +266,15 @@ async def get_fund_detail(cik: str, accession_no: str) -> dict:
     submissions = await sub_task
     manager_intelligence = await iapd_task
 
-    # 3. If IAPD match found, fetch the ADV PDF for AUM + client data (in parallel with await)
+    # 3. If IAPD match found, get ADV data — cache-first, live fetch on miss
     adv_data = None
     if manager_intelligence and manager_intelligence.get("crd"):
-        adv_data = await fetch_adv_data(manager_intelligence["crd"], timeout=12.0)
+        crd = manager_intelligence["crd"]
+        adv_data = get_cached_adv(crd)
+        if adv_data is None:
+            adv_data = await fetch_adv_data(crd, timeout=12.0)
+            if adv_data:
+                set_cached_adv(adv_data)
         if adv_data:
             manager_intelligence["aum"] = adv_data.total_aum
             manager_intelligence["discretionary_aum"] = adv_data.discretionary_aum

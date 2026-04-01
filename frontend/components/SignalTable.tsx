@@ -126,8 +126,36 @@ export default function SignalTable({ signals }: Props) {
 
   return (
     <>
+      {/* Mobile card list */}
+      <div className="sm:hidden space-y-2">
+        {signals.map((s, i) => (
+          <div
+            key={i}
+            className="bg-white rounded-lg border border-slate-200 px-4 py-3 cursor-pointer active:bg-blue-50"
+            onClick={() => setSelected(s)}
+          >
+            <div className="flex items-start justify-between gap-3 mb-1.5">
+              <p className="font-medium text-slate-800 text-sm leading-snug flex-1">{s.fund_name}</p>
+              <ScoreBadge score={s.priority_score} />
+            </div>
+            <p className="text-xs text-slate-400 mb-2">{s.fund_type}</p>
+            <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
+              <span className="font-medium text-slate-700">{formatSize(s.offering_size_m)}</span>
+              <span>{formatDate(s.date_of_first_sale)}</span>
+              <StatesCell states={s.solicitation_states} fundState={s.fund_state} />
+            </div>
+            {s.platforms.length > 0 && (
+              <div className="mt-2">
+                <PlatformBadges platforms={s.platforms} known={s.known_platforms} />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop table */}
       {/* No overflow-hidden here — it clips absolutely-positioned tooltips */}
-      <div className="bg-white rounded-lg border border-slate-200">
+      <div className="hidden sm:block bg-white rounded-lg border border-slate-200">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wider text-slate-400">
