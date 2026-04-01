@@ -1,9 +1,6 @@
-name: Daily EDGAR ingestion
+name: EDGAR ingestion
 
 on:
-  schedule:
-    # 6am ET every day (11:00 UTC) — Form D filings post overnight
-    - cron: "0 11 * * *"
   workflow_dispatch:
     inputs:
       days:
