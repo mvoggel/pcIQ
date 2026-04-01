@@ -128,7 +128,7 @@ def fetch_likely_rias(
         .in_("state", states)
         .or_(f"aum.gte.{min_aum},aum.is.null")
         .eq("is_active", True)
-        .order("aum", desc=True, nulls_last=True)
+        .order("aum", desc=True, nullsfirst=False)
         .limit(limit)
         .execute()
     )
