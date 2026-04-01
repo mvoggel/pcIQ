@@ -14,7 +14,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date
 
-from app.models.form_d import FormDFiling
+from app.models.form_d import FormDFiling, normalize_platform_name
 
 
 @dataclass
@@ -95,15 +95,22 @@ def score_filing(filing: FormDFiling, territory_states: set[str]) -> TerritorySi
     elif size > 0 and size < 2:
         score -= 1.0   # penalize micro raises (likely not institutional)
 
-    # Freshness bonus (within 7 days)
-    if filing.date_of_first_sale:
-        days_old = (date.today() - filing.date_of_first_sale).days
+    # Freshness bonus — use first_sale date if set, fall back to filed_at
+    # (most filings have filed_at; date_of_first_sale is often omitted)
+    freshness_date = filing.date_of_first_sale or filing.filed_at
+    if freshness_date:
+        days_old = (date.today() - freshness_date).days
         if days_old <= 7:
-            score += 1.0
+            score += 1.5
+        elif days_old <= 14:
+            score += 0.5
 
-    # Fund type bonus
-    if "private equity" in filing.investment_fund_type.lower():
+    # Fund type bonus — private equity and private credit/debt are the target
+    fund_type_lower = filing.investment_fund_type.lower()
+    if "private equity" in fund_type_lower or "private credit" in fund_type_lower:
         score += 1.0
+    elif "other investment fund" in fund_type_lower or "pooled investment" in fund_type_lower:
+        score += 0.5  # still relevant — many private credit funds file under this type
 
     return TerritorySignal(
         fund_name=filing.entity_name,
@@ -147,10 +154,15 @@ def generate_territory_report(
         signal = score_filing(filing, states_set)
         report.signals.append(signal)
 
-        # Count platform activity only for filings relevant to this territory
+        # Count platform activity — normalize names to collapse duplicates
+        # (e.g. 9 JPMorgan international affiliates → 1 "JPMorgan Asset Management" entry)
         if signal.is_in_territory or not filing.all_solicitation_states:
+            seen_canonical: set[str] = set()
             for p in filing.platform_names:
-                platform_counts[p] += 1
+                canonical = normalize_platform_name(p)
+                if canonical not in seen_canonical:
+                    platform_counts[canonical] += 1
+                    seen_canonical.add(canonical)
 
     report.platform_counts = dict(platform_counts)
     return report

@@ -9,7 +9,7 @@ import { fetchSignals } from "@/lib/api";
 import { SignalsResponse } from "@/lib/types";
 
 const TERRITORIES = ["Northeast", "Southeast", "Midwest", "Southwest", "West Coast"];
-const DAY_OPTIONS = [7, 14, 30];
+const DAY_OPTIONS = [7, 14, 30, 90, 180];
 
 function filteredSignals(data: SignalsResponse, query: string) {
   if (!query.trim()) return data.signals;

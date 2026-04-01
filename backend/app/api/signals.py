@@ -24,7 +24,7 @@ def get_territories() -> list[dict]:
 @router.get("/signals")
 def get_signals(
     territory: str = Query(default="Northeast"),
-    days: int = Query(default=7, ge=1, le=90),
+    days: int = Query(default=7, ge=1, le=180),
 ) -> dict:
     if territory not in DEFAULT_TERRITORIES:
         territory = "Northeast"

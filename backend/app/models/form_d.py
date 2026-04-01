@@ -52,13 +52,109 @@ class RelatedPerson(BaseModel):
         return f"{self.first_name} {self.last_name}".strip()
 
 
-# Known private markets platforms — used to flag high-value distribution signals
-KNOWN_PLATFORMS = {
+# ---------------------------------------------------------------------------
+# Known private markets platforms — flags high-value distribution signals.
+# Matching is substring: "icapital" matches "iCapital Markets LLC" etc.
+#
+# Tier 1 — Direct RIA / alt-wealth platforms (strongest signal: fund is
+#           actively reaching registered advisors and their HNW clients)
+# Tier 2 — Major wirehouses & large independent BD networks (large advisor
+#           force, significant retail distribution reach)
+# Tier 3 — Boutique placement agents & investment banks (often institutional
+#           but still meaningful for deal flow intelligence)
+# ---------------------------------------------------------------------------
+KNOWN_PLATFORMS: set[str] = {
+    # Tier 1 — Alt-wealth / RIA platforms
     "icapital", "cais", "altigo", "artivest", "moonfare",
     "yield street", "yieldstreet", "cadre", "fundrise",
-    "morgan stanley", "merrill lynch", "ubs", "wells fargo advisors",
-    "raymond james", "lpl financial", "ameriprise",
+    "forge securities", "equityzen", "hiive",
+    # Tier 2 — Wirehouses & major retail BDs
+    "morgan stanley", "merrill lynch",
+    "ubs",
+    "wells fargo",           # broadened — catches Clearing Services, Advisors FN, etc.
+    "raymond james",
+    "lpl financial",
+    "ameriprise",
+    "edward jones",
+    "stifel",
+    "oppenheimer",
+    "baird",
+    "janney",
+    "piper sandler",
+    "kestra",
+    "cetera",
+    "commonwealth financial",
+    "cambridge investment",
+    "securities america",
+    "advisor group", "osaic",
+    "rockefeller",
+    "national financial services",   # Fidelity clearing arm
+    "fidelity",
+    "schwab",
+    "pershing",
+    "foreside",              # fund distributor — frequently signals retail push
+    # Tier 3 — Placement agents & banks with meaningful distribution reach
+    "goldman sachs",
+    "j.p. morgan securities", "jpmorgan securities",
+    "jp morgan securities",
+    "houlihan lokey",
+    "pjt partners",
+    "lazard",
+    "cantor fitzgerald",
+    "b. riley", "b riley",
+    "rbc capital",
+    "deutsche bank securities",
+    "credit suisse securities",
+    "jefferies",
+    "evercore",
+    "hamilton lane",         # alt investment platform / placement agent
 }
+
+# ---------------------------------------------------------------------------
+# Platform name normalizer — collapses noisy filing variants into a clean
+# canonical display name. Applied before writing platform_counts to the API
+# response so the UI panel doesn't show 9 rows of "JPMorgan Asset Management
+# (Europe/Asia/Canada/…)" from a single fund's global distribution list.
+# ---------------------------------------------------------------------------
+PLATFORM_CANONICAL: dict[str, str] = {
+    "jpmorgan": "JPMorgan Asset Management",
+    "j.p. morgan": "JPMorgan Asset Management",
+    "jpmam": "JPMorgan Asset Management",
+    "morgan stanley": "Morgan Stanley",
+    "merrill lynch": "Merrill Lynch",
+    "wells fargo": "Wells Fargo",
+    "goldman sachs": "Goldman Sachs",
+    "ubs financial": "UBS",
+    "raymond james": "Raymond James",
+    "lpl financial": "LPL Financial",
+    "ameriprise": "Ameriprise",
+    "icapital": "iCapital",
+    "cais": "CAIS",
+    "altigo": "Altigo",
+    "houlihan lokey": "Houlihan Lokey",
+    "foreside": "Foreside Fund Services",
+    "kestra": "Kestra",
+    "stifel": "Stifel",
+    "oppenheimer": "Oppenheimer",
+    "cantor fitzgerald": "Cantor Fitzgerald",
+    "pjt partners": "PJT Partners",
+    "lazard": "Lazard",
+    "rbc capital": "RBC Capital Markets",
+    "deutsche bank securities": "Deutsche Bank Securities",
+    "credit suisse": "Credit Suisse",
+    "rockefeller": "Rockefeller Financial",
+    "hamilton lane": "Hamilton Lane",
+    "macquarie": "Macquarie",
+}
+
+
+def normalize_platform_name(raw_name: str) -> str:
+    """Return a clean canonical name, or the original if no match."""
+    lower = raw_name.lower()
+    for fragment, canonical in PLATFORM_CANONICAL.items():
+        if fragment in lower:
+            return canonical
+    return raw_name
 
 
 class SalesCompensationRecipient(BaseModel):
