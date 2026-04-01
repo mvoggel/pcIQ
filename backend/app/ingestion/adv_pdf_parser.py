@@ -244,14 +244,23 @@ async def fetch_adv_data(crd: str, timeout: float = 12.0) -> ADVData | None:
     if not crd:
         return None
 
+    _MAX_PDF_BYTES = 8 * 1024 * 1024  # 8 MB — large-firm PDFs (Macquarie etc.) OOM Railway
+
     url = f"{ADV_PDF_BASE}/{crd}/PDF/{crd}.pdf"
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
+            # HEAD first: skip giant PDFs before downloading
+            head = await client.head(url, headers=_HEADERS)
+            content_length = int(head.headers.get("content-length", 0))
+            if content_length > _MAX_PDF_BYTES:
+                return None
+
             resp = await client.get(url, headers=_HEADERS)
             if resp.status_code != 200:
                 return None
-            # parse_adv_pdf only reads the first _ADV_MAX_PAGES pages now,
-            # so it completes in 1-2s — run inline, no thread pool needed.
+            if len(resp.content) > _MAX_PDF_BYTES:
+                return None  # guard: server didn't send Content-Length but PDF is still large
+
             return await asyncio.to_thread(parse_adv_pdf, crd, resp.content)
     except Exception:
         return None
