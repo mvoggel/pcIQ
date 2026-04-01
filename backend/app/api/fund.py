@@ -24,6 +24,9 @@ from app.ingestion.form_d_parser import parse_form_d
 
 router = APIRouter(prefix="/api")
 
+# States with ingested RIA data — fallback for funds that solicit in all 50 states
+_INGESTED_STATES = ["NY", "CA", "CT", "MA", "TX", "FL", "NJ"]
+
 # Human-readable labels for Reg D federal exemption codes
 EXEMPTION_LABELS: dict[str, str] = {
     "06b": "Rule 506(b) — Private placement (up to 35 non-accredited investors)",
@@ -263,7 +266,10 @@ async def get_fund_detail(cik: str, accession_no: str) -> dict:
             if p.full_name.strip()
         ]
         all_sol = filing.all_solicitation_states
-        if all_sol != {"ALL"}:
+        if all_sol == {"ALL"}:
+            # Fund solicits nationally — show RIAs from our ingested states
+            sol_states = _INGESTED_STATES
+        else:
             sol_states = sorted(all_sol)
     except Exception:
         pass
