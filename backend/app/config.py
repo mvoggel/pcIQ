@@ -13,5 +13,8 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str = ""
 
+    # Comma-separated allowed CORS origins — extend via env var in prod
+    allowed_origins: str = "http://localhost:3000,http://localhost:3001,http://localhost:3002"
+
 
 settings = Settings()
