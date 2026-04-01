@@ -23,7 +23,6 @@ import asyncio
 import io
 import re
 from dataclasses import dataclass, field
-from functools import partial
 
 import httpx
 import pdfplumber
@@ -251,8 +250,8 @@ async def fetch_adv_data(crd: str, timeout: float = 12.0) -> ADVData | None:
             resp = await client.get(url, headers=_HEADERS)
             if resp.status_code != 200:
                 return None
-        # Run CPU-bound PDF parse in a thread pool so it doesn't block the event loop
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, partial(parse_adv_pdf, crd, resp.content))
+            # parse_adv_pdf only reads the first _ADV_MAX_PAGES pages now,
+            # so it completes in 1-2s — run inline, no thread pool needed.
+            return await asyncio.to_thread(parse_adv_pdf, crd, resp.content)
     except Exception:
         return None

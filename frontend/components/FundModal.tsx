@@ -256,16 +256,15 @@ export default function FundModal({ signal, onClose }: Props) {
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  // Fetch enriched detail — abort on modal close or fund change
+  // Fetch enriched detail — abort when modal closes or fund switches
   useEffect(() => {
     const controller = new AbortController();
     setLoadingDetail(true);
     setDetailError(false);
-    setDetail(null);
     fetchFundDetail(signal.cik, signal.accession_no, controller.signal)
-      .then(setDetail)
+      .then((d) => { if (!controller.signal.aborted) setDetail(d); })
       .catch((e) => { if (e.name !== "AbortError") setDetailError(true); })
-      .finally(() => setLoadingDetail(false));
+      .finally(() => { if (!controller.signal.aborted) setLoadingDetail(false); });
     return () => controller.abort();
   }, [signal.cik, signal.accession_no]);
 
