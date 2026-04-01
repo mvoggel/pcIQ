@@ -17,6 +17,7 @@ from fastapi import APIRouter, HTTPException
 from app.config import settings
 from app.db.adv_cache import get_cached_adv, set_cached_adv
 from app.db.client import get_db
+from app.db.reader import fetch_likely_rias
 from app.ingestion.adv_pdf_parser import fetch_adv_data
 from app.ingestion.edgar_client import fetch_form_d_xml
 from app.ingestion.form_d_parser import parse_form_d
@@ -248,6 +249,7 @@ async def get_fund_detail(cik: str, accession_no: str) -> dict:
     sub_task  = asyncio.create_task(_fetch_submissions(cik))
     iapd_task = asyncio.create_task(_search_iapd_manager(entity_name))
 
+    sol_states: list[str] = []
     related_persons: list[dict] = []
     try:
         xml = await xml_task
@@ -260,6 +262,9 @@ async def get_fund_detail(cik: str, accession_no: str) -> dict:
             for p in filing.related_persons
             if p.full_name.strip()
         ]
+        all_sol = filing.all_solicitation_states
+        if all_sol != {"ALL"}:
+            sol_states = sorted(all_sol)
     except Exception:
         pass
 
@@ -294,7 +299,11 @@ async def get_fund_detail(cik: str, accession_no: str) -> dict:
     phone = (submissions.get("phone") or "").strip()
     sic_desc = (submissions.get("sicDescription") or "").strip()
 
-    # 3. Format exemptions with labels
+    # 4. RIA profile match — RIAs in territory with $100M+ AUM
+    fund_state = (row.get("state_or_country") or "").upper()
+    likely_rias = fetch_likely_rias(sol_states, fund_state=fund_state)
+
+    # 5. Format exemptions with labels
     raw_exemptions: list[str] = row.get("federal_exemptions") or []
     exemptions = [
         {"code": code, "label": EXEMPTION_LABELS.get(code, code)}
@@ -321,4 +330,5 @@ async def get_fund_detail(cik: str, accession_no: str) -> dict:
         "phone": phone,
         "sic_description": sic_desc,
         "manager_intelligence": manager_intelligence,
+        "likely_rias": likely_rias,
     }

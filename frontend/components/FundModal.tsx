@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ClientType, FundEnrichment, ManagerIntelligence, Signal } from "@/lib/types";
+import { ClientType, FundEnrichment, ManagerIntelligence, RiaMatch, Signal } from "@/lib/types";
 import { fetchFundDetail } from "@/lib/api";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -233,6 +233,95 @@ function StatBox({ label, children }: { label: string; children: React.ReactNode
     <div>
       <p className="text-xs uppercase tracking-wider text-slate-400 mb-1">{label}</p>
       <div className="text-sm font-medium text-slate-800">{children}</div>
+    </div>
+  );
+}
+
+function fmtRiaAum(n: number | null | undefined): string {
+  if (n == null) return "—";
+  if (n >= 1_000_000_000_000) return `$${(n / 1_000_000_000_000).toFixed(1)}T`;
+  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(1)}B`;
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(0)}M`;
+  return `$${n.toLocaleString()}`;
+}
+
+function RiaRow({ ria }: { ria: RiaMatch }) {
+  const iapdUrl = `https://adviserinfo.sec.gov/firm/summary/${ria.crd_number}`;
+  const privatePct =
+    ria.aum && ria.private_fund_aum
+      ? Math.round((ria.private_fund_aum / ria.aum) * 100)
+      : null;
+
+  return (
+    <div className="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0 gap-3">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-medium text-slate-800 truncate">{ria.firm_name}</span>
+          {privatePct != null && privatePct > 0 && (
+            <span className="text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 whitespace-nowrap">
+              {privatePct}% private funds
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-slate-400 mt-0.5">
+          {[ria.city, ria.state].filter(Boolean).join(", ")}
+          {ria.num_advisors != null && (
+            <span className="ml-2">· {ria.num_advisors} advisor{ria.num_advisors !== 1 ? "s" : ""}</span>
+          )}
+        </p>
+      </div>
+      <div className="flex items-center gap-3 shrink-0">
+        <div className="text-right">
+          <p className="text-xs text-slate-400">AUM</p>
+          <p className="text-sm font-semibold text-slate-800">{fmtRiaAum(ria.aum)}</p>
+        </div>
+        <a
+          href={iapdUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 bg-blue-50 rounded px-2 py-1 whitespace-nowrap"
+        >
+          IAPD →
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function LikelyAllocators({ rias, loading }: { rias: RiaMatch[] | undefined; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        <Skeleton /><Skeleton /><Skeleton />
+      </div>
+    );
+  }
+
+  if (!rias || rias.length === 0) {
+    return (
+      <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">
+        <p className="text-xs text-slate-500 leading-relaxed">
+          No RIA data available for this territory yet.{" "}
+          <span className="font-medium">Run ADV ingestion</span> (
+          <code className="text-slate-600 bg-slate-100 rounded px-1">make ingest-adv-state STATE=NY</code>
+          ) to populate RIA profiles.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border border-slate-200 rounded-lg overflow-hidden">
+      <div className="divide-y divide-slate-100 px-4">
+        {rias.map((ria) => (
+          <RiaRow key={ria.crd_number} ria={ria} />
+        ))}
+      </div>
+      <div className="px-4 py-2 bg-slate-50 border-t border-slate-100">
+        <p className="text-xs text-slate-400">
+          Profile match only — RIAs in territory with $100M+ AUM · Not confirmed allocations · Source: Form ADV
+        </p>
+      </div>
     </div>
   );
 }
@@ -484,13 +573,13 @@ export default function FundModal({ signal, onClose }: Props) {
             )}
           </div>
 
-          {/* ── Roadmap callout ── */}
-          <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3">
-            <p className="text-xs font-semibold text-blue-700 mb-1">Coming in a later release</p>
-            <p className="text-xs text-blue-600 leading-relaxed">
-              RIA intelligence: which advisors on iCapital or CAIS have allocated to this fund,
-              their AUM, and contact territory — sourced from Form ADV.
+          {/* ── Likely Allocators (RIA intelligence) ── */}
+          <div>
+            <p className="text-xs uppercase tracking-wider text-slate-400 mb-2">
+              Likely Allocators
+              <span className="ml-1 normal-case text-slate-300">RIAs in territory · Form ADV</span>
             </p>
+            <LikelyAllocators rias={detail?.likely_rias} loading={loading} />
           </div>
 
         </div>

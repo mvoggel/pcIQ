@@ -70,6 +70,18 @@ export interface ManagerIntelligence {
   client_types: ClientType[];
 }
 
+export interface RiaMatch {
+  firm_name: string;
+  crd_number: string;
+  state: string;
+  city: string;
+  aum: number | null;
+  private_fund_aum: number | null;
+  website: string | null;
+  num_advisors: number | null;
+  total_accounts: number | null;
+}
+
 export interface FundEnrichment {
   cik: string;
   accession_no: string;
@@ -90,4 +102,5 @@ export interface FundEnrichment {
   phone: string;
   sic_description: string;
   manager_intelligence: ManagerIntelligence | null;
+  likely_rias: RiaMatch[];
 }

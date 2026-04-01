@@ -1,5 +1,6 @@
 """
-Supabase reader — fetch Form D filings + associated platforms for signal scoring.
+Supabase reader — fetch Form D filings + associated platforms for signal scoring,
+plus RIA profile matching for the fund detail modal.
 
 Reads from already-ingested data rather than re-fetching from EDGAR.
 """
@@ -89,3 +90,47 @@ def fetch_filings_for_signals(days: int = 7) -> list[FormDFiling]:
             filings.append(filing)
 
     return filings
+
+
+def fetch_likely_rias(
+    solicitation_states: list[str],
+    fund_state: str = "",
+    min_aum: float = 100_000_000,
+    limit: int = 8,
+) -> list[dict]:
+    """
+    Return RIAs in the fund's territory that meet the AUM threshold.
+
+    These are 'likely allocator' profile matches — NOT confirmed allocations.
+    Logic: right geography + significant AUM + private fund history = relevant prospect.
+
+    Args:
+        solicitation_states: 2-letter state codes from the fund's Form D.
+                             Empty list means fall back to fund_state.
+        fund_state:          Issuer state — fallback when no solicitation states disclosed.
+        min_aum:             Minimum AUM to be considered a meaningful allocator ($).
+        limit:               Max number of RIA profiles to return.
+    """
+    db = get_db()
+
+    states = [s.upper() for s in solicitation_states if s and s.upper() != "ALL"]
+    if not states and fund_state:
+        states = [fund_state.upper()]
+    if not states:
+        return []
+
+    result = (
+        db.table("rias")
+        .select(
+            "firm_name, crd_number, state, city, aum, private_fund_aum, "
+            "website, num_advisors, total_accounts"
+        )
+        .in_("state", states)
+        .gte("aum", min_aum)
+        .eq("is_active", True)
+        .order("aum", desc=True)
+        .limit(limit)
+        .execute()
+    )
+
+    return result.data or []

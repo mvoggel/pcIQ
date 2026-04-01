@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS rias (
     firm_name           TEXT NOT NULL,
     entity_id           BIGINT REFERENCES entities(id),
     aum                 NUMERIC,                    -- assets under management ($)
+    private_fund_aum    NUMERIC,                    -- AUM allocated to private funds ($)
     total_accounts      INT,
     num_advisors        INT,
     city                TEXT,
@@ -78,9 +79,13 @@ CREATE TABLE IF NOT EXISTS rias (
     updated_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS rias_firm_name_idx ON rias (firm_name);
-CREATE INDEX IF NOT EXISTS rias_state_idx     ON rias (state);
-CREATE INDEX IF NOT EXISTS rias_aum_idx       ON rias (aum DESC);
+CREATE INDEX IF NOT EXISTS rias_firm_name_idx         ON rias (firm_name);
+CREATE INDEX IF NOT EXISTS rias_state_idx             ON rias (state);
+CREATE INDEX IF NOT EXISTS rias_aum_idx               ON rias (aum DESC);
+CREATE INDEX IF NOT EXISTS rias_private_fund_aum_idx  ON rias (private_fund_aum DESC);
+
+-- Migration: add private_fund_aum if upgrading from an earlier schema version
+-- ALTER TABLE rias ADD COLUMN IF NOT EXISTS private_fund_aum NUMERIC;
 
 
 -- -----------------------------------------------------------------------
