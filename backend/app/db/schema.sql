@@ -153,6 +153,55 @@ CREATE TABLE IF NOT EXISTS adv_enrichment (
 
 
 -- -----------------------------------------------------------------------
+-- ria_platforms
+-- Maps RIAs to the alternative investment platforms they are registered on.
+-- Source: iCapital advisor directory, CAIS partner list, manual CSV import.
+-- This is the "confirmed linkage" that makes allocator inference defensible:
+--   Fund Y is on iCapital (fund_platforms)  +
+--   RIA X is an iCapital partner (ria_platforms)  +
+--   RIA X is in territory  →  high-confidence probable buyer
+-- -----------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS ria_platforms (
+    id              BIGSERIAL PRIMARY KEY,
+    crd_number      TEXT NOT NULL,
+    platform_name   TEXT NOT NULL,           -- 'iCapital', 'CAIS', 'Orion', etc.
+    source          TEXT DEFAULT 'scrape',   -- 'scrape', 'csv', 'manual'
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (crd_number, platform_name)
+);
+
+CREATE INDEX IF NOT EXISTS ria_platforms_crd_idx      ON ria_platforms (crd_number);
+CREATE INDEX IF NOT EXISTS ria_platforms_platform_idx ON ria_platforms (platform_name);
+
+
+-- -----------------------------------------------------------------------
+-- feeder_funds
+-- Access vehicles / feeder funds that package underlying strategies.
+-- Sourced from EDGAR Form D filings where the entity name contains a
+-- known platform keyword (e.g., "iCapital Blue Owl Senior Loan Fund II").
+-- Tells us which underlying strategies each platform is actively packaging,
+-- how much has flowed, and which states they're targeting.
+-- -----------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS feeder_funds (
+    id              BIGSERIAL PRIMARY KEY,
+    cik             TEXT NOT NULL,
+    accession_no    TEXT NOT NULL UNIQUE,
+    entity_name     TEXT NOT NULL,           -- raw EDGAR name, e.g. "iCapital Blue Owl SLF II"
+    platform_name   TEXT NOT NULL,           -- 'iCapital', 'CAIS', etc.
+    underlying_fund TEXT,                    -- stripped name, e.g. "Blue Owl SLF II"
+    total_raised    NUMERIC,                 -- total_amount_sold from Form D ($)
+    target_raise    NUMERIC,                 -- total_offering_amount ($)
+    states          TEXT[],                  -- states listed in Form D
+    filed_at        DATE,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS feeder_funds_platform_idx  ON feeder_funds (platform_name);
+CREATE INDEX IF NOT EXISTS feeder_funds_filed_idx     ON feeder_funds (filed_at DESC);
+CREATE INDEX IF NOT EXISTS feeder_funds_underlying_idx ON feeder_funds (underlying_fund);
+
+
+-- -----------------------------------------------------------------------
 -- territories
 -- Wholesaler territory definitions. Each row = one territory config
 -- for one firm. Phase 1: manually seeded. Phase 2: UI-configurable.

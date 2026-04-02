@@ -92,6 +92,90 @@ def fetch_filings_for_signals(days: int = 7) -> list[FormDFiling]:
     return filings
 
 
+def fetch_confirmed_allocators(
+    filing_id: int,
+    solicitation_states: list[str],
+    fund_state: str = "",
+    limit: int = 20,
+) -> list[dict]:
+    """
+    Return RIAs that are BOTH registered on a platform distributing this fund
+    AND in the fund's territory. These are HIGH-CONFIDENCE probable buyers.
+
+    Inference chain (all three must hold):
+      1. Fund Y is on iCapital/CAIS  →  fund_platforms.is_known_platform = True
+      2. RIA X is an iCapital/CAIS partner  →  ria_platforms table
+      3. RIA X is in Fund Y's territory  →  state match
+
+    Returns [] if the fund has no known platforms or ria_platforms table is empty.
+    Each result row includes `matched_platforms` — which platform(s) created the match.
+    """
+    db = get_db()
+
+    # Step 1: which known platforms distribute this fund?
+    plat_result = (
+        db.table("fund_platforms")
+        .select("platform_name")
+        .eq("filing_id", filing_id)
+        .eq("is_known_platform", True)
+        .execute()
+    )
+    platforms = [p["platform_name"] for p in (plat_result.data or [])]
+    if not platforms:
+        return []
+
+    # Step 2: RIA CRDs registered on those platforms
+    rp_result = (
+        db.table("ria_platforms")
+        .select("crd_number, platform_name")
+        .in_("platform_name", platforms)
+        .execute()
+    )
+    if not rp_result.data:
+        return []
+
+    # Index: crd → [platform1, platform2, ...]
+    crd_to_platforms: dict[str, list[str]] = {}
+    for r in rp_result.data:
+        crd_to_platforms.setdefault(r["crd_number"], []).append(r["platform_name"])
+
+    platform_crds = list(crd_to_platforms.keys())
+
+    # Step 3: filter to territory
+    states = [s.upper() for s in solicitation_states if s and s.upper() != "ALL"]
+    if not states and fund_state:
+        states = [fund_state.upper()]
+    if not states:
+        # No territory info — return all platform members (still valuable intel)
+        ria_result = (
+            db.table("rias")
+            .select("firm_name, crd_number, state, city, aum, private_fund_aum, num_advisors")
+            .in_("crd_number", platform_crds)
+            .eq("is_active", True)
+            .order("aum", desc=True, nullsfirst=False)
+            .limit(limit)
+            .execute()
+        )
+    else:
+        ria_result = (
+            db.table("rias")
+            .select("firm_name, crd_number, state, city, aum, private_fund_aum, num_advisors")
+            .in_("crd_number", platform_crds)
+            .in_("state", states)
+            .eq("is_active", True)
+            .order("aum", desc=True, nullsfirst=False)
+            .limit(limit)
+            .execute()
+        )
+
+    results = []
+    for row in (ria_result.data or []):
+        row["matched_platforms"] = crd_to_platforms.get(row["crd_number"], [])
+        results.append(row)
+
+    return results
+
+
 def fetch_likely_rias(
     solicitation_states: list[str],
     fund_state: str = "",

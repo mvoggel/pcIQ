@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ClientType, FundEnrichment, ManagerIntelligence, RiaMatch, Signal } from "@/lib/types";
+import { ClientType, ConfirmedRia, FundEnrichment, ManagerIntelligence, RiaMatch, Signal } from "@/lib/types";
 import { fetchFundDetail } from "@/lib/api";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -283,6 +283,95 @@ function RiaRow({ ria }: { ria: RiaMatch }) {
         >
           IAPD →
         </a>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmedRiaRow({ ria }: { ria: ConfirmedRia }) {
+  const iapdUrl = `https://adviserinfo.sec.gov/firm/summary/${ria.crd_number}`;
+  const privatePct =
+    ria.aum && ria.private_fund_aum
+      ? Math.round((ria.private_fund_aum / ria.aum) * 100)
+      : null;
+
+  return (
+    <div className="flex items-center justify-between py-2.5 border-b border-emerald-50 last:border-0 gap-3">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-medium text-slate-800 truncate">{ria.firm_name}</span>
+          {ria.matched_platforms.map((p) => (
+            <span key={p} className="text-xs px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100 whitespace-nowrap">
+              {p}
+            </span>
+          ))}
+          {privatePct != null && privatePct > 0 && (
+            <span className="text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 whitespace-nowrap">
+              {privatePct}% private funds
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-slate-400 mt-0.5">
+          {[ria.city, ria.state].filter(Boolean).join(", ")}
+          {ria.num_advisors != null && (
+            <span className="ml-2">· {ria.num_advisors} advisor{ria.num_advisors !== 1 ? "s" : ""}</span>
+          )}
+        </p>
+      </div>
+      <div className="flex items-center gap-3 shrink-0">
+        <div className="text-right">
+          <p className="text-xs text-slate-400">AUM</p>
+          <p className="text-sm font-semibold text-slate-800">{fmtRiaAum(ria.aum)}</p>
+        </div>
+        <a
+          href={iapdUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 bg-blue-50 rounded px-2 py-1 whitespace-nowrap"
+        >
+          IAPD →
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmedAllocators({ rias, loading }: { rias: ConfirmedRia[] | undefined; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        <Skeleton /><Skeleton /><Skeleton />
+      </div>
+    );
+  }
+
+  // Don't render the section at all when empty — falls back to Likely Allocators below
+  if (!rias || rias.length === 0) return null;
+
+  const uniquePlatforms = [...new Set(rias.flatMap((r) => r.matched_platforms))];
+
+  return (
+    <div className="border border-emerald-200 rounded-lg overflow-hidden">
+      {/* Header banner */}
+      <div className="px-4 py-2 bg-emerald-50 border-b border-emerald-100 flex items-center gap-2">
+        <span className="text-xs font-semibold text-emerald-800 uppercase tracking-wider">
+          Confirmed Platform Allocators
+        </span>
+        <span className="text-xs text-emerald-600">
+          · {rias.length} RIA{rias.length !== 1 ? "s" : ""} · {uniquePlatforms.join(", ")}
+        </span>
+      </div>
+
+      <div className="divide-y divide-emerald-50 px-4 bg-white">
+        {rias.map((ria) => (
+          <ConfirmedRiaRow key={ria.crd_number} ria={ria} />
+        ))}
+      </div>
+
+      <div className="px-4 py-2 bg-emerald-50 border-t border-emerald-100">
+        <p className="text-xs text-emerald-700">
+          Confirmed platform relationship · These firms are registered {uniquePlatforms.join(" / ")} partners in this territory · Source: platform directory + Form ADV
+        </p>
       </div>
     </div>
   );
@@ -572,6 +661,17 @@ export default function FundModal({ signal, onClose }: Props) {
               <p className="text-sm text-slate-400">All states / not specified</p>
             )}
           </div>
+
+          {/* ── Confirmed Platform Allocators (high-confidence) ── */}
+          {(loading || (detail?.confirmed_rias && detail.confirmed_rias.length > 0)) && (
+            <div>
+              <p className="text-xs uppercase tracking-wider text-slate-400 mb-2">
+                Confirmed Platform Allocators
+                <span className="ml-1 normal-case text-slate-300">Platform partner · In territory</span>
+              </p>
+              <ConfirmedAllocators rias={detail?.confirmed_rias} loading={loading} />
+            </div>
+          )}
 
           {/* ── Likely Allocators (RIA intelligence) ── */}
           <div>

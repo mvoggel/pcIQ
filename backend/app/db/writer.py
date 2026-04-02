@@ -100,6 +100,42 @@ def upsert_fund_platforms(filing_id: int, recipients) -> None:
         db.table("fund_platforms").upsert(rows, on_conflict="filing_id,platform_name").execute()
 
 
+def upsert_ria_platform(crd_number: str, platform_name: str, source: str = "scrape") -> None:
+    """
+    Upsert a single (crd_number, platform_name) record into ria_platforms.
+    Idempotent — safe to call repeatedly as we rescrape directories.
+    """
+    db = get_db()
+    db.table("ria_platforms").upsert(
+        {"crd_number": crd_number, "platform_name": platform_name, "source": source},
+        on_conflict="crd_number,platform_name",
+    ).execute()
+
+
+def upsert_feeder_fund(row: dict) -> None:
+    """
+    Upsert a feeder fund / access vehicle record.
+    row keys: cik, accession_no, entity_name, platform_name, underlying_fund,
+              total_raised, target_raise, states, filed_at
+    Idempotent on accession_no.
+    """
+    db = get_db()
+    db.table("feeder_funds").upsert(
+        {
+            "cik": row["cik"],
+            "accession_no": row["accession_no"],
+            "entity_name": row["entity_name"],
+            "platform_name": row["platform_name"],
+            "underlying_fund": row.get("underlying_fund"),
+            "total_raised": row.get("total_raised"),
+            "target_raise": row.get("target_raise"),
+            "states": row.get("states") or [],
+            "filed_at": row["filed_at"].isoformat() if row.get("filed_at") else None,
+        },
+        on_conflict="accession_no",
+    ).execute()
+
+
 def upsert_ria(ria: RIA, entity_id: int | None = None) -> int:
     """
     Upsert an RIA record. Idempotent on crd_number.

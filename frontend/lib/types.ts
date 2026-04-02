@@ -82,6 +82,17 @@ export interface RiaMatch {
   total_accounts: number | null;
 }
 
+export interface ConfirmedRia {
+  firm_name: string;
+  crd_number: string;
+  state: string;
+  city: string;
+  aum: number | null;
+  private_fund_aum: number | null;
+  num_advisors: number | null;
+  matched_platforms: string[];   // which platform(s) created the match
+}
+
 export interface FundEnrichment {
   cik: string;
   accession_no: string;
@@ -102,5 +113,6 @@ export interface FundEnrichment {
   phone: string;
   sic_description: string;
   manager_intelligence: ManagerIntelligence | null;
+  confirmed_rias: ConfirmedRia[];
   likely_rias: RiaMatch[];
 }

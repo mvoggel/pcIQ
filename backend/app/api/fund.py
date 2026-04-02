@@ -17,7 +17,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from app.config import settings
 from app.db.adv_cache import get_cached_adv, set_cached_adv
 from app.db.client import get_db
-from app.db.reader import fetch_likely_rias
+from app.db.reader import fetch_confirmed_allocators, fetch_likely_rias
 from app.ingestion.adv_pdf_parser import fetch_adv_data
 from app.ingestion.edgar_client import fetch_form_d_xml
 from app.ingestion.form_d_parser import parse_form_d
@@ -321,8 +321,10 @@ async def get_fund_detail(
     phone = (submissions.get("phone") or "").strip()
     sic_desc = (submissions.get("sicDescription") or "").strip()
 
-    # 4. RIA profile match — RIAs in territory with $100M+ AUM
+    # 4. RIA intelligence — confirmed platform members + likely allocators
     fund_state = (row.get("state_or_country") or "").upper()
+    filing_id: int = row["id"]
+    confirmed_rias = fetch_confirmed_allocators(filing_id, sol_states, fund_state=fund_state)
     likely_rias = fetch_likely_rias(sol_states, fund_state=fund_state)
 
     # 5. Format exemptions with labels
@@ -352,5 +354,6 @@ async def get_fund_detail(
         "phone": phone,
         "sic_description": sic_desc,
         "manager_intelligence": manager_intelligence,
+        "confirmed_rias": confirmed_rias,
         "likely_rias": likely_rias,
     }

@@ -2,7 +2,7 @@ PYTHON := python3
 PIP := $(PYTHON) -m pip
 MAX ?= 200
 
-.PHONY: run ingest install test venv ingest-adv-state ingest-adv-crd ingest-adv-all enrich-rias
+.PHONY: run ingest install test venv ingest-adv-state ingest-adv-crd ingest-adv-all enrich-rias ingest-feeders ingest-platform-rias platform-stats
 
 venv:
 	$(PYTHON) -m venv .venv
@@ -59,6 +59,48 @@ enrich-rias:
 	@echo "\nCheck progress:"
 	curl -s https://pciq-production.up.railway.app/api/rias/stats \
 	  -H "Authorization: Bearer $(INGEST_SECRET)" | python3 -m json.tool
+
+# ── Platform intelligence pipeline ───────────────────────────────────────────
+# Step 1: scrape EDGAR for iCapital/CAIS/etc. access vehicle Form D filings
+#   make ingest-feeders               # last 180 days (default)
+#   make ingest-feeders DAYS=365      # last year
+ingest-feeders:
+	$(PYTHON) -m app.ingestion.run_feeder --days $(or $(DAYS),180)
+
+ingest-feeders-dry:
+	$(PYTHON) -m app.ingestion.run_feeder --days $(or $(DAYS),180) --dry-run
+
+# Step 2: populate ria_platforms from a data source
+#   make ingest-platform-rias              # EDGAR inference (default — run step 1 first)
+#   make ingest-platform-rias SOURCE=cais  # scrape CAIS advisor directory
+#   make ingest-platform-rias SOURCE=csv   # load from data/platform_rias.csv
+ingest-platform-rias:
+	$(PYTHON) -m app.ingestion.platform_scraper --source $(or $(SOURCE),edgar)
+
+# Step 3: check counts (or trigger via Railway)
+#   make platform-stats
+platform-stats:
+	@test -n "$(INGEST_SECRET)" || (echo "ERROR: set INGEST_SECRET env var first" && exit 1)
+	curl -s https://pciq-production.up.railway.app/api/platforms/stats \
+	  -H "Authorization: Bearer $(INGEST_SECRET)" | python3 -m json.tool
+
+# Trigger full pipeline on Railway (feeder ingest → ria_platforms → stats)
+platform-pipeline:
+	@test -n "$(INGEST_SECRET)" || (echo "ERROR: set INGEST_SECRET env var first" && exit 1)
+	@echo "Step 1: Ingesting feeder funds from EDGAR (last 180 days)..."
+	curl -s -X POST "https://pciq-production.up.railway.app/api/platforms/ingest/feeder?days=180" \
+	  -H "Authorization: Bearer $(INGEST_SECRET)" | python3 -m json.tool
+	@echo "\nWaiting 90s for feeder ingest to complete..."
+	@sleep 90
+	@echo "\nStep 2: Populating ria_platforms via EDGAR inference..."
+	curl -s -X POST "https://pciq-production.up.railway.app/api/platforms/ingest/rias?source=edgar" \
+	  -H "Authorization: Bearer $(INGEST_SECRET)" | python3 -m json.tool
+	@echo "\nWaiting 30s..."
+	@sleep 30
+	@echo "\nStats:"
+	curl -s "https://pciq-production.up.railway.app/api/platforms/stats" \
+	  -H "Authorization: Bearer $(INGEST_SECRET)" | python3 -m json.tool
+
 
 # Signal reports — territory intelligence
 signals:
