@@ -120,23 +120,35 @@ def fetch_confirmed_allocators(
         .eq("is_known_platform", True)
         .execute()
     )
-    platforms = [p["platform_name"] for p in (plat_result.data or [])]
-    if not platforms:
+    fund_platform_names = [p["platform_name"] for p in (plat_result.data or [])]
+    if not fund_platform_names:
         return []
 
-    # Step 2: RIA CRDs registered on those platforms
-    rp_result = (
-        db.table("ria_platforms")
-        .select("crd_number, platform_name")
-        .in_("platform_name", platforms)
-        .execute()
-    )
+    # Step 2: RIA CRDs registered on tracked platforms.
+    # fund_platforms stores full legal names ("iCapital Markets LLC") while
+    # ria_platforms stores brand names ("iCapital") — do a substring match.
+    rp_all = db.table("ria_platforms").select("crd_number, platform_name").execute()
+    if not rp_all.data:
+        return []
+
+    # Match: ria platform brand is a substring of the fund platform name (case-insensitive)
+    # e.g. "iCapital" in "iCapital Markets LLC" → match
+    def _platform_matches(fund_name: str, ria_brand: str) -> bool:
+        return ria_brand.lower() in fund_name.lower()
+
+    rp_result_data = [
+        r for r in rp_all.data
+        if any(_platform_matches(fp, r["platform_name"]) for fp in fund_platform_names)
+    ]
+
+    if not rp_result_data:
+        return []
     if not rp_result.data:
         return []
 
     # Index: crd → [platform1, platform2, ...]
     crd_to_platforms: dict[str, list[str]] = {}
-    for r in rp_result.data:
+    for r in rp_result_data:
         crd_to_platforms.setdefault(r["crd_number"], []).append(r["platform_name"])
 
     platform_crds = list(crd_to_platforms.keys())
