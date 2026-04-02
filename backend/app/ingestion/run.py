@@ -32,7 +32,7 @@ async def run(start_date: date, end_date: date, dry_run: bool = False) -> None:
     print(f"Found {len(filings_meta)} Form D filings from EDGAR.\n")
 
     resolver = EntityResolver()
-    private_credit: list = []
+    private_credit: list = []  # list of (filing, xml) tuples
     errors = 0
 
     for meta in filings_meta:
@@ -69,7 +69,7 @@ async def run(start_date: date, end_date: date, dry_run: bool = False) -> None:
         if not filing.is_private_credit_candidate:
             continue
 
-        private_credit.append(filing)
+        private_credit.append((filing, xml))
         entity_record = resolver.resolve(filing.entity_name, cik=filing.cik)
 
         size = f"${filing.offering_size_m}M" if filing.offering_size_m else "size unknown"
@@ -93,7 +93,7 @@ async def run(start_date: date, end_date: date, dry_run: bool = False) -> None:
     # --- Write to Supabase ---
     print("\nWriting to Supabase...")
     written = 0
-    for filing in private_credit:
+    for filing, xml in private_credit:
         try:
             entity_rec = resolver.resolve(filing.entity_name, cik=filing.cik)
             entity_id = upsert_entity(
@@ -101,7 +101,7 @@ async def run(start_date: date, end_date: date, dry_run: bool = False) -> None:
                 cik=entity_rec["cik"],
                 entity_type="fund",
             )
-            upsert_filing(filing, entity_id=entity_id)
+            upsert_filing(filing, entity_id=entity_id, raw_xml=xml)
             written += 1
         except Exception as exc:
             print(f"  ✗  DB write failed for {filing.entity_name}: {exc}")

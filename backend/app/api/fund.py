@@ -12,7 +12,7 @@ import asyncio
 import re
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from app.config import settings
 from app.db.adv_cache import get_cached_adv, set_cached_adv
@@ -130,7 +130,7 @@ async def _search_iapd_manager(entity_name: str) -> dict | None:
 
     params = {"query": query, "hl": "false", "nrows": "5", "start": "0"}
     try:
-        async with httpx.AsyncClient(timeout=8) as client:
+        async with httpx.AsyncClient(timeout=4) as client:
             resp = await client.get(
                 _IAPD_SEARCH_URL, headers=_IAPD_HEADERS, params=params
             )
@@ -209,13 +209,20 @@ async def _search_iapd_manager(entity_name: str) -> dict | None:
         return None
 
 
+async def _bg_cache_adv(crd: str) -> None:
+    """Background task: fetch ADV PDF and cache for next request. Runs after response is sent."""
+    adv = await fetch_adv_data(crd, timeout=30.0)
+    if adv:
+        set_cached_adv(adv)
+
+
 async def _fetch_submissions(cik: str) -> dict:
     """Fetch company/fund metadata from EDGAR submissions API. Returns {} on failure."""
     padded = cik.zfill(10)
     url = f"https://data.sec.gov/submissions/CIK{padded}.json"
     headers = {"User-Agent": settings.edgar_user_agent}
     try:
-        async with httpx.AsyncClient(timeout=8) as client:
+        async with httpx.AsyncClient(timeout=4) as client:
             resp = await client.get(url, headers=headers)
             if resp.status_code == 200:
                 return resp.json()
@@ -225,10 +232,12 @@ async def _fetch_submissions(cik: str) -> dict:
 
 
 @router.get("/fund/{cik}/{accession_no}")
-async def get_fund_detail(cik: str, accession_no: str) -> dict:
+async def get_fund_detail(
+    cik: str, accession_no: str, background_tasks: BackgroundTasks
+) -> dict:
     """
     Return enriched fund data for the detail modal.
-    Immediate DB fields + live XML parse for GPs + EDGAR submissions for metadata.
+    Fast path: DB + cached ADV data. Slow enrichment (ADV PDF) runs in background.
     """
     db = get_db()
 
@@ -247,13 +256,21 @@ async def get_fund_detail(cik: str, accession_no: str) -> dict:
 
     entity_name = row["entity_name"] or ""
 
-    # 2. Fetch XML + submissions + IAPD search (all parallel, ADV PDF added below)
-    xml_task  = asyncio.create_task(fetch_form_d_xml(cik, accession_no))
+    # 2. XML parse (use cached raw_xml from DB if available, else live fetch with short timeout)
+    sol_states: list[str] = []
+    related_persons: list[dict] = []
+    cached_xml = row.get("raw_xml") or ""
+
+    async def _get_xml() -> str:
+        if cached_xml:
+            return cached_xml
+        return await fetch_form_d_xml(cik, accession_no, timeout=5.0)
+
+    # Run XML parse + submissions + IAPD search all in parallel
+    xml_task  = asyncio.create_task(_get_xml())
     sub_task  = asyncio.create_task(_fetch_submissions(cik))
     iapd_task = asyncio.create_task(_search_iapd_manager(entity_name))
 
-    sol_states: list[str] = []
-    related_persons: list[dict] = []
     try:
         xml = await xml_task
         filing = parse_form_d(xml, cik, accession_no)
@@ -267,7 +284,6 @@ async def get_fund_detail(cik: str, accession_no: str) -> dict:
         ]
         all_sol = filing.all_solicitation_states
         if all_sol == {"ALL"}:
-            # Fund solicits nationally — show RIAs from our ingested states
             sol_states = _INGESTED_STATES
         else:
             sol_states = sorted(all_sol)
@@ -277,15 +293,15 @@ async def get_fund_detail(cik: str, accession_no: str) -> dict:
     submissions = await sub_task
     manager_intelligence = await iapd_task
 
-    # 3. If IAPD match found, get ADV data — cache-first, live fetch on miss
+    # 3. ADV data — cache-first. On miss: schedule background fetch for next request.
+    #    Never block the response on a live PDF download (Railway 512MB OOM risk).
     adv_data = None
     if manager_intelligence and manager_intelligence.get("crd"):
         crd = manager_intelligence["crd"]
         adv_data = get_cached_adv(crd)
         if adv_data is None:
-            adv_data = await fetch_adv_data(crd, timeout=12.0)
-            if adv_data:
-                set_cached_adv(adv_data)
+            # Cache miss — background-fetch PDF after this response is sent
+            background_tasks.add_task(_bg_cache_adv, crd)
         if adv_data:
             manager_intelligence["aum"] = adv_data.total_aum
             manager_intelligence["discretionary_aum"] = adv_data.discretionary_aum

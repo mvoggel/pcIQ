@@ -96,7 +96,7 @@ def fetch_likely_rias(
     solicitation_states: list[str],
     fund_state: str = "",
     min_aum: float = 100_000_000,
-    limit: int = 8,
+    limit: int = 20,
 ) -> list[dict]:
     """
     Return RIAs in the fund's territory that meet the AUM threshold.

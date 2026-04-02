@@ -117,18 +117,19 @@ async def fetch_filing_index(cik: str, accession_no: str) -> dict:
         return resp.json()
 
 
-async def fetch_form_d_xml(cik: str, accession_no: str) -> str:
+async def fetch_form_d_xml(cik: str, accession_no: str, timeout: float = 5.0) -> str:
     """
     Fetch the raw Form D XML document for a given filing.
 
     Returns the XML string for parsing by form_d_parser.
+    timeout: seconds to wait — default 5s for modal path (cached path bypasses this).
     """
     acc_path = accession_no.replace("-", "")
     # Form D primary document is always primary_doc.xml
     url = f"{EDGAR_BASE}/Archives/edgar/data/{cik.lstrip('0')}/{acc_path}/primary_doc.xml"
 
     async with httpx.AsyncClient() as client:
-        resp = await client.get(url, headers=_headers(), timeout=30)
+        resp = await client.get(url, headers=_headers(), timeout=timeout)
         resp.raise_for_status()
         await asyncio.sleep(_REQUEST_DELAY)
         return resp.text

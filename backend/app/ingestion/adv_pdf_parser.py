@@ -88,7 +88,7 @@ def _to_int(s: str) -> int | None:
         return None
 
 
-_ADV_MAX_PAGES = 35  # Items 5.A/B/D/F always appear in the first section of Part 1A
+_ADV_MAX_PAGES = 15  # Items 5.A/B/D/F appear within the first ~15 pages of Part 1A
 
 
 def _extract_all_text(pdf_bytes: bytes) -> str:
@@ -244,7 +244,7 @@ async def fetch_adv_data(crd: str, timeout: float = 12.0) -> ADVData | None:
     if not crd:
         return None
 
-    _MAX_PDF_BYTES = 8 * 1024 * 1024  # 8 MB — large-firm PDFs (Macquarie etc.) OOM Railway
+    _MAX_PDF_BYTES = 4 * 1024 * 1024  # 4 MB — keeps pdfplumber well under Railway 512MB limit
 
     url = f"{ADV_PDF_BASE}/{crd}/PDF/{crd}.pdf"
     try:

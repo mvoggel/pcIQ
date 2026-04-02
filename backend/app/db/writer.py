@@ -32,10 +32,11 @@ def upsert_entity(canonical_name: str, cik: str = "", entity_type: str = "fund")
     return result.data[0]["id"]
 
 
-def upsert_filing(filing: FormDFiling, entity_id: int | None = None) -> int:
+def upsert_filing(filing: FormDFiling, entity_id: int | None = None, raw_xml: str = "") -> int:
     """
     Upsert a Form D filing. Returns the filing's DB id.
     Idempotent — safe to call again if the same accession_no is re-processed.
+    raw_xml: the source XML string — stored so the modal can parse GPs without a live EDGAR fetch.
     """
     db = get_db()
 
@@ -58,6 +59,7 @@ def upsert_filing(filing: FormDFiling, entity_id: int | None = None) -> int:
         "city": filing.address.city or None,
         "state_or_country": filing.address.state_or_country or None,
         "federal_exemptions": filing.federal_exemptions or [],
+        "raw_xml": raw_xml or None,
     }
 
     result = (
