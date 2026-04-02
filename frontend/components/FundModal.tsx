@@ -336,10 +336,13 @@ function ConfirmedRiaRow({ ria }: { ria: ConfirmedRia }) {
   );
 }
 
-function InfoTooltip({ text }: { text: string }) {
+function InfoTooltip({ text, color = "slate" }: { text: string; color?: "slate" | "emerald" }) {
+  const badge = color === "emerald"
+    ? "bg-emerald-200 text-emerald-800"
+    : "bg-slate-200 text-slate-600";
   return (
-    <span className="relative group inline-flex items-center ml-1.5 cursor-default">
-      <span className="w-3.5 h-3.5 rounded-full bg-emerald-200 text-emerald-800 text-[9px] font-bold inline-flex items-center justify-center leading-none select-none">
+    <span className="relative group inline-flex items-center ml-1 cursor-default">
+      <span className={`w-3.5 h-3.5 rounded-full ${badge} text-[9px] font-bold inline-flex items-center justify-center leading-none select-none`}>
         i
       </span>
       <span className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 bg-slate-800 text-white text-xs rounded-lg px-3 py-2 leading-relaxed shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
@@ -368,13 +371,18 @@ function ConfirmedAllocators({ rias, loading }: { rias: ConfirmedRia[] | undefin
     <div className="border border-emerald-200 rounded-lg overflow-hidden">
       {/* Header banner */}
       <div className="px-4 py-2 bg-emerald-50 border-b border-emerald-100 flex items-center gap-2">
-        <span className="text-xs font-semibold text-emerald-800 uppercase tracking-wider">
-          Confirmed Platform Allocators
-        </span>
-        <span className="text-xs text-emerald-600">
-          · {rias.length} RIA{rias.length !== 1 ? "s" : ""} · {uniquePlatforms.join(", ")}
-        </span>
-        <InfoTooltip text={`Three-signal match: (1) this fund distributes via ${uniquePlatforms.join("/")} (Form D salesCompensationList), (2) each RIA here is a registered ${uniquePlatforms.join("/")} partner (platform directory), and (3) each RIA is headquartered in this fund's solicitation territory. All three signals must hold — these are confirmed probable buyers, not just geographic matches.`} />
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-emerald-800 uppercase tracking-wider">
+              Confirmed Advisors Buying This Strategy
+            </span>
+            <span className="text-xs text-emerald-600">
+              · {rias.length} RIA{rias.length !== 1 ? "s" : ""} · {uniquePlatforms.join(", ")}
+            </span>
+            <InfoTooltip color="emerald" text={`Three-signal match: (1) this fund distributes via ${uniquePlatforms.join("/")} (Form D salesCompensationList), (2) each RIA here is a registered ${uniquePlatforms.join("/")} partner (platform directory), and (3) each RIA is headquartered in this fund's solicitation territory. All three signals must hold — these are confirmed probable buyers, not just geographic matches.`} />
+          </div>
+          <p className="text-xs text-emerald-600 mt-0.5">Confirmed platform relationship · In territory</p>
+        </div>
       </div>
 
       <div className="divide-y divide-emerald-50 px-4 bg-white">
@@ -677,23 +685,28 @@ export default function FundModal({ signal, onClose }: Props) {
             )}
           </div>
 
-          {/* ── Confirmed Platform Allocators (high-confidence) ── */}
+          {/* ── Confirmed Advisors Buying This Strategy ── */}
           {(loading || (detail?.confirmed_rias && detail.confirmed_rias.length > 0)) && (
             <div>
-              <p className="text-xs uppercase tracking-wider text-slate-400 mb-2">
-                Confirmed Platform Allocators
-                <span className="ml-1 normal-case text-slate-300">Platform partner · In territory</span>
+              <p className="text-xs uppercase tracking-wider text-slate-400 mb-1">
+                Confirmed Advisors Buying This Strategy
+              </p>
+              <p className="text-xs text-slate-400 mb-2 normal-case">
+                Platform partner · In territory · Highest confidence
               </p>
               <ConfirmedAllocators rias={detail?.confirmed_rias} loading={loading} />
             </div>
           )}
 
-          {/* ── Likely Allocators (RIA intelligence) ── */}
+          {/* ── Likely Advisors Buying This Strategy ── */}
           <div>
-            <p className="text-xs uppercase tracking-wider text-slate-400 mb-2">
-              Likely Allocators
-              <span className="ml-1 normal-case text-slate-300">RIAs in territory · Form ADV</span>
-            </p>
+            <div className="flex items-center gap-1 mb-1">
+              <p className="text-xs uppercase tracking-wider text-slate-400">
+                Likely Advisors Buying This Strategy
+              </p>
+              <InfoTooltip text="RIAs in this fund's solicitation territory with $100M+ AUM, sourced from Form ADV filings. These firms have the scale and geography to allocate to this strategy — but platform relationship is not yet confirmed. Use as a prospecting list alongside the Confirmed section above." />
+            </div>
+            <p className="text-xs text-slate-400 mb-2 normal-case">RIAs in territory · $100M+ AUM · Form ADV</p>
             <LikelyAllocators rias={detail?.likely_rias} loading={loading} />
           </div>
 
