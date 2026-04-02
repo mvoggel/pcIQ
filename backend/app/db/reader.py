@@ -143,8 +143,6 @@ def fetch_confirmed_allocators(
 
     if not rp_result_data:
         return []
-    if not rp_result.data:
-        return []
 
     # Index: crd → [platform1, platform2, ...]
     crd_to_platforms: dict[str, list[str]] = {}
