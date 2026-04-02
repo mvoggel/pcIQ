@@ -114,6 +114,7 @@ async def _search_feeder_filings(
     start_date: date,
     end_date: date,
     max_results: int = 200,
+    debug: bool = False,
 ) -> list[dict]:
     """Search EDGAR EFTS for Form D filings mentioning `keyword`."""
     url = f"{EFTS_BASE}/LATEST/search-index"
@@ -130,32 +131,49 @@ async def _search_feeder_filings(
                 "startdt": start_date.isoformat(),
                 "enddt": end_date.isoformat(),
                 "from": from_offset,
+                "hits.hits.total.value": "true",
             }
             data = await _get(client, url, params)
             hits = data.get("hits", {}).get("hits", [])
+            total = data.get("hits", {}).get("total", {}).get("value", 0)
+
+            if debug and from_offset == 0:
+                print(f"    [debug] '{keyword}': {total} total hits from EDGAR full-text search")
+
             if not hits:
                 break
 
             for hit in hits:
                 src = hit.get("_source", {})
-                entity_name = src.get("entity_name", "")
+
+                # Entity name lives in display_names (list), not entity_name.
+                # Format: "iCapital-Blue Owl SLF II, L.P.  (CIK 0002124526)"
+                display_names = src.get("display_names") or []
+                raw_name = display_names[0] if display_names else ""
+                entity_name = re.sub(r"\s*\(CIK\s*\d+\)\s*$", "", raw_name).strip()
+
+                if debug:
+                    print(f"    [debug]   {entity_name!r}")
 
                 # Only keep filings where entity_name contains the keyword
-                # (vs. filings where iCapital merely appears as a broker-dealer)
+                # (vs. filings where the platform merely appears as a broker-dealer)
                 if keyword.lower() not in entity_name.lower():
                     continue
 
                 ciks = src.get("ciks", [])
                 cik = ciks[0] if ciks else ""
-                file_id = hit.get("_id", "")
+                # adsh is already formatted with dashes: "0002124526-26-000001"
+                accession_no = src.get("adsh", "")
+                if not cik or not accession_no:
+                    continue
+
                 results.append({
                     "entity_name": entity_name,
                     "cik": cik,
-                    "file_id": file_id,
+                    "accession_no": accession_no,
                     "filed_at": src.get("file_date", ""),
                 })
 
-            total = data.get("hits", {}).get("total", {}).get("value", 0)
             from_offset += page_size
             if from_offset >= total or from_offset >= max_results:
                 break
@@ -167,6 +185,7 @@ async def run(
     start_date: date,
     end_date: date,
     dry_run: bool = False,
+    debug: bool = False,
 ) -> None:
     mode = "DRY RUN" if dry_run else "writing to Supabase"
     print(f"\npcIQ feeder fund ingestion | {start_date} → {end_date} | {mode}\n")
@@ -175,7 +194,7 @@ async def run(
     seen_accessions: set[str] = set()  # dedup across keyword searches
 
     for keyword in PLATFORM_KEYWORDS:
-        hits = await _search_feeder_filings(keyword, start_date, end_date)
+        hits = await _search_feeder_filings(keyword, start_date, end_date, debug=debug)
         if not hits:
             continue
 
@@ -184,14 +203,7 @@ async def run(
         for meta in hits:
             entity_name = meta.get("entity_name", "")
             cik = meta.get("cik", "")
-            file_id = meta.get("file_id", "")
-
-            # Parse accession from EFTS _id
-            acc_raw = file_id.split("/")[-1].split(":")[0]
-            if len(acc_raw) == 18:
-                acc = f"{acc_raw[:10]}-{acc_raw[10:12]}-{acc_raw[12:]}"
-            else:
-                acc = acc_raw
+            acc = meta.get("accession_no", "")
 
             if not cik or not acc or acc in seen_accessions:
                 continue
@@ -281,12 +293,14 @@ def main() -> None:
         help="End date override (YYYY-MM-DD)",
     )
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--debug", action="store_true",
+                        help="Print raw EDGAR hit entity names before filtering")
     args = parser.parse_args()
 
     end_date = args.end or date.today()
     start_date = args.start or (end_date - timedelta(days=args.days))
 
-    asyncio.run(run(start_date, end_date, dry_run=args.dry_run))
+    asyncio.run(run(start_date, end_date, dry_run=args.dry_run, debug=args.debug))
 
 
 if __name__ == "__main__":

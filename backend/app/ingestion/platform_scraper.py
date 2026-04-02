@@ -194,51 +194,64 @@ def _load_edgar_cross_ref() -> list[dict]:
     """
     Derive probable platform memberships from feeder_funds + rias tables.
 
-    Logic: if an RIA state matches a state where iCapital filed a feeder fund
-    for an underlying strategy, and that RIA has prior private fund AUM, they
-    are a probable iCapital platform member.
+    Logic:
+      1. Find all platforms that have filed feeder funds (confirms they're active).
+      2. For each such platform, match RIAs that have private_fund_aum > 0
+         across all our ingested states.
 
-    This is inference-based (lower confidence than scrape), but is 100% automated
-    and SEC-data-derived. Sets source='edgar_inferred'.
+    Most feeder fund Form D filings are nationwide ("all states"), so we don't
+    filter by feeder-level state data — instead we use the presence of feeder
+    funds as the platform signal and match against all ingested RIAs with
+    demonstrated private fund exposure.
+
+    Sets source='edgar_inferred' (lower confidence than a real directory scrape,
+    but 100% automated and SEC-data-derived).
     """
     try:
         from app.db.client import get_db
         db = get_db()
 
-        # Get feeder funds and their states per platform
-        feeder_result = db.table("feeder_funds").select("platform_name, states").execute()
+        # Which platforms have filed feeder funds?
+        feeder_result = db.table("feeder_funds").select("platform_name").execute()
         if not feeder_result.data:
             print("  No feeder funds in DB yet — run run_feeder.py first")
             return []
 
-        # Build: platform → set of states
-        platform_states: dict[str, set[str]] = {}
-        for row in feeder_result.data:
-            platform = row["platform_name"]
-            for s in (row["states"] or []):
-                platform_states.setdefault(platform, set()).add(s.upper())
+        active_platforms = {row["platform_name"] for row in feeder_result.data}
+        print(f"  Active platforms from feeder_funds: {sorted(active_platforms)}")
 
-        results = []
-        for platform, states in platform_states.items():
-            if not states:
-                continue
+        # RIAs with confirmed private fund exposure (strongest signal)
+        ria_result = (
+            db.table("rias")
+            .select("crd_number")
+            .not_.is_("private_fund_aum", "null")
+            .gt("private_fund_aum", 0)
+            .eq("is_active", True)
+            .execute()
+        )
+        ria_crds = [r["crd_number"] for r in (ria_result.data or []) if r.get("crd_number")]
+        print(f"  RIAs with private_fund_aum > 0: {len(ria_crds)}")
+
+        if not ria_crds:
+            # Fallback: any enriched RIA (has AUM data)
             ria_result = (
                 db.table("rias")
                 .select("crd_number")
-                .in_("state", sorted(states))
-                .not_.is_("private_fund_aum", "null")
-                .gt("private_fund_aum", 0)
+                .not_.is_("aum", "null")
                 .eq("is_active", True)
                 .execute()
             )
-            for row in (ria_result.data or []):
-                crd = row.get("crd_number", "").strip()
-                if crd:
-                    results.append({
-                        "crd_number": crd,
-                        "platform_name": platform,
-                        "source": "edgar_inferred",
-                    })
+            ria_crds = [r["crd_number"] for r in (ria_result.data or []) if r.get("crd_number")]
+            print(f"  Fallback — RIAs with any AUM: {len(ria_crds)}")
+
+        results = []
+        for platform in active_platforms:
+            for crd in ria_crds:
+                results.append({
+                    "crd_number": crd,
+                    "platform_name": platform,
+                    "source": "edgar_inferred",
+                })
 
         return results
 
