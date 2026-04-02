@@ -5,7 +5,6 @@ Protected by a bearer token (INGEST_SECRET env var).
 Called by the GitHub Actions daily workflow.
 """
 
-import asyncio
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Header, HTTPException, BackgroundTasks
@@ -42,6 +41,6 @@ async def trigger_ingest(
     async def _run() -> None:
         await run_ingestion(start, end, dry_run=False)
 
-    background_tasks.add_task(asyncio.ensure_future, _run())
+    background_tasks.add_task(_run)
 
     return {"status": "started", "start": str(start), "end": str(end), "days": days}
