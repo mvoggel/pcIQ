@@ -7,6 +7,8 @@ All writes use upsert so the ingestion job is safe to re-run (idempotent).
   - rias:            upsert on crd_number (stable FINRA identifier)
 """
 
+from datetime import datetime, timezone
+
 from app.db.client import get_db
 from app.models.form_d import FormDFiling
 from app.models.ria import RIA
@@ -119,6 +121,7 @@ def upsert_ria(ria: RIA, entity_id: int | None = None) -> int:
         "website": ria.website or None,
         "is_active": True,
         "adv_filed_at": ria.adv_filed_at.isoformat() if ria.adv_filed_at else None,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     result = (
         db.table("rias")

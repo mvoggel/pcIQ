@@ -73,13 +73,19 @@ async def _enrich_one(crd: str) -> bool:
 
 
 async def _enrich_batch() -> None:
-    """Background task: enrich one batch of null-AUM RIAs."""
+    """Background task: enrich one batch of null-AUM RIAs.
+
+    Orders by updated_at ASC so each batch processes different RIAs — failed
+    attempts get their updated_at bumped so they rotate to the back of the queue
+    instead of being selected again every single batch.
+    """
     db = get_db()
     result = (
         db.table("rias")
         .select("crd_number")
         .is_("aum", "null")
         .eq("is_active", True)
+        .order("updated_at", desc=False)   # oldest-touched first → cycles through all
         .limit(_BATCH)
         .execute()
     )
@@ -87,8 +93,17 @@ async def _enrich_batch() -> None:
 
     for row in rows:
         crd = (row.get("crd_number") or "").strip()
-        if crd:
-            await _enrich_one(crd)
+        if not crd:
+            continue
+        success = await _enrich_one(crd)
+        if not success:
+            # Bump updated_at so this RIA moves to the back of the queue next batch
+            try:
+                db.table("rias").update({
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }).eq("crd_number", crd).execute()
+            except Exception:
+                pass
         await asyncio.sleep(_DELAY)
 
 
