@@ -244,23 +244,28 @@ async def fetch_adv_data(crd: str, timeout: float = 12.0) -> ADVData | None:
     if not crd:
         return None
 
-    _MAX_PDF_BYTES = 4 * 1024 * 1024  # 4 MB — keeps pdfplumber well under Railway 512MB limit
+    _MAX_STREAM_BYTES = 4 * 1024 * 1024  # stream at most 4MB — covers first 15-20 pages
 
     url = f"{ADV_PDF_BASE}/{crd}/PDF/{crd}.pdf"
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            # HEAD first: skip giant PDFs before downloading
-            head = await client.head(url, headers=_HEADERS)
-            content_length = int(head.headers.get("content-length", 0))
-            if content_length > _MAX_PDF_BYTES:
-                return None
+            # Stream the download so we stop at 4MB regardless of total PDF size.
+            # Most ADV PDFs are 5-20MB total but Items 5.A/B/D/F are in the first ~15 pages.
+            # A HEAD+reject approach skips ~90% of firms unnecessarily.
+            async with client.stream("GET", url, headers=_HEADERS) as resp:
+                if resp.status_code != 200:
+                    return None
+                chunks: list[bytes] = []
+                total = 0
+                async for chunk in resp.aiter_bytes(65536):
+                    chunks.append(chunk)
+                    total += len(chunk)
+                    if total >= _MAX_STREAM_BYTES:
+                        break
+                pdf_bytes = b"".join(chunks)
 
-            resp = await client.get(url, headers=_HEADERS)
-            if resp.status_code != 200:
-                return None
-            if len(resp.content) > _MAX_PDF_BYTES:
-                return None  # guard: server didn't send Content-Length but PDF is still large
-
-            return await asyncio.to_thread(parse_adv_pdf, crd, resp.content)
+        if not pdf_bytes:
+            return None
+        return await asyncio.to_thread(parse_adv_pdf, crd, pdf_bytes)
     except Exception:
         return None
