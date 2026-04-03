@@ -74,6 +74,21 @@ enrich-rias:
 	curl -s https://pciq-production.up.railway.app/api/rias/stats \
 	  -H "Authorization: Bearer $(INGEST_SECRET)" | python3 -m json.tool
 
+# ── ADV brochure platform scanner ────────────────────────────────────────────
+# Scans Form ADV Part 2 brochures for platform mentions (iCapital, CAIS, etc.)
+# Writes matches to ria_platforms with source='adv_brochure'.
+# Pass 1 (EDGAR EFTS): fast, ~2–5 min. Pass 2 (direct brochure fetch): ~30–60 min.
+#   make scan-brochures             # full scan (both passes)
+#   make scan-brochures PASS=1      # EDGAR search only (quick test)
+#   make scan-brochures PASS=2      # direct fetch only
+#   make scan-brochures DRY=1       # dry run — print matches, no DB writes
+scan-brochures:
+	$(PYTHON) -m app.ingestion.brochure_scanner \
+	  $(if $(filter 1,$(PASS)),--pass1-only,) \
+	  $(if $(filter 2,$(PASS)),--pass2-only,) \
+	  $(if $(DRY),--dry-run,) \
+	  $(if $(V),--verbose,)
+
 # ── Platform intelligence pipeline ───────────────────────────────────────────
 # Step 1: scrape EDGAR for iCapital/CAIS/etc. access vehicle Form D filings
 #   make ingest-feeders               # last 180 days (default)
