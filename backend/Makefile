@@ -52,14 +52,24 @@ ingest-adv-all:
 	$(PYTHON) -m app.ingestion.run_adv --state MO --max $(MAX)
 	@echo "Done. Run 'make enrich-rias' to backfill AUM from Railway."
 
-# AUM backfill — must be triggered against Railway (IAPD detail is 403 from local IPs)
-# Requires INGEST_SECRET env var to be set.
-# Run multiple times until enrich count reaches 0.
+# ── AUM backfill ─────────────────────────────────────────────────────────────
+
+# RECOMMENDED: bulk enrichment via ADV PDF — runs locally, no Railway IP needed.
+# Uses the public SEC ADV PDF URL (works from any IP, no auth).
+# Enriches all null-AUM RIAs concurrently. Safe to interrupt and re-run.
+# Expect ~60–90 min for 2,000 RIAs (state-registered firms skip fast).
+#   make enrich-bulk              # all null-AUM RIAs
+#   make enrich-bulk MAX=50       # test run — first 50
+enrich-bulk:
+	$(PYTHON) -m app.ingestion.bulk_enrich $(if $(MAX),--max $(MAX),)
+
+# Railway trigger (legacy) — use enrich-bulk instead for faster results.
+# Only useful if ADV PDF route is failing and you need IAPD detail endpoint.
+# Requires INGEST_SECRET env var. Only 10 RIAs per call.
 enrich-rias:
 	@test -n "$(INGEST_SECRET)" || (echo "ERROR: set INGEST_SECRET env var first" && exit 1)
 	curl -s -X POST https://pciq-production.up.railway.app/api/rias/enrich \
-	  -H "Authorization: Bearer $(INGEST_SECRET)" \
-	  -G --data-urlencode "batch=100" | python3 -m json.tool
+	  -H "Authorization: Bearer $(INGEST_SECRET)" | python3 -m json.tool
 	@echo "\nCheck progress:"
 	curl -s https://pciq-production.up.railway.app/api/rias/stats \
 	  -H "Authorization: Bearer $(INGEST_SECRET)" | python3 -m json.tool
