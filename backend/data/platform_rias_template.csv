@@ -1,0 +1,23 @@
+# iCapital RIA CSV template
+# ─────────────────────────────────────────────────────────────────────────────
+# HOW TO GENERATE THIS FILE:
+#   1. Go to icapital.com → For Financial Professionals → Advisor Locator
+#   2. Filter by state (NY, CA, CT, MA, TX, FL, NJ, IL, CO, WA)
+#   3. Export or copy firm names (sort by AUM descending, take top 50 per state)
+#   4. Match firm names to CRD numbers via:
+#      https://adviserinfo.sec.gov/  (search by firm name)
+#      or: https://brokercheck.finra.org/
+#   5. Save as: backend/data/platform_rias.csv  (drop the _template suffix)
+#
+# COLUMNS: crd_number, platform_name[, firm_name]
+#   crd_number    — IAPD CRD number (digits only, no leading zeros)
+#   platform_name — "iCapital" or "CAIS" (exact string, case-sensitive for DB)
+#   firm_name     — optional, for your reference only
+#
+# IMPORT COMMAND (from backend/ directory):
+#   python -m app.ingestion.platform_scraper --source csv --file data/platform_rias.csv
+# ─────────────────────────────────────────────────────────────────────────────
+crd_number,platform_name,firm_name
+# 123456,iCapital,Example Wealth Management LLC
+# 789012,iCapital,Another RIA Partners
+# 345678,CAIS,CAIS Partner Firm

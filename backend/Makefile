@@ -46,6 +46,10 @@ ingest-adv-all:
 	$(PYTHON) -m app.ingestion.run_adv --state GA --max $(MAX)
 	$(PYTHON) -m app.ingestion.run_adv --state NC --max $(MAX)
 	$(PYTHON) -m app.ingestion.run_adv --state VA --max $(MAX)
+	$(PYTHON) -m app.ingestion.run_adv --state OH --max $(MAX)
+	$(PYTHON) -m app.ingestion.run_adv --state AZ --max $(MAX)
+	$(PYTHON) -m app.ingestion.run_adv --state MN --max $(MAX)
+	$(PYTHON) -m app.ingestion.run_adv --state MO --max $(MAX)
 	@echo "Done. Run 'make enrich-rias' to backfill AUM from Railway."
 
 # AUM backfill — must be triggered against Railway (IAPD detail is 403 from local IPs)

@@ -1,0 +1,66 @@
+name: Weekly RIA AUM enrichment
+
+on:
+  schedule:
+    - cron: "0 8 * * 0"   # Every Sunday 4am ET (8:00 UTC)
+  workflow_dispatch: {}
+
+# Calls /api/rias/enrich 4× with 50s gaps → 40 RIAs enriched per run.
+# At 40/week: ~2,000 RIAs fully enriched in ~12 weeks.
+# Railway IP bypasses the IAPD 403 that blocks local calls.
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enrich batch 1 / 4
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.INGEST_SECRET }}" \
+            "https://pciq-production.up.railway.app/api/rias/enrich")
+          echo "Batch 1 HTTP status: $response"
+          if [ "$response" != "200" ]; then exit 1; fi
+
+      - name: Wait 50s
+        run: sleep 50
+
+      - name: Enrich batch 2 / 4
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.INGEST_SECRET }}" \
+            "https://pciq-production.up.railway.app/api/rias/enrich")
+          echo "Batch 2 HTTP status: $response"
+          if [ "$response" != "200" ]; then exit 1; fi
+
+      - name: Wait 50s
+        run: sleep 50
+
+      - name: Enrich batch 3 / 4
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.INGEST_SECRET }}" \
+            "https://pciq-production.up.railway.app/api/rias/enrich")
+          echo "Batch 3 HTTP status: $response"
+          if [ "$response" != "200" ]; then exit 1; fi
+
+      - name: Wait 50s
+        run: sleep 50
+
+      - name: Enrich batch 4 / 4
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.INGEST_SECRET }}" \
+            "https://pciq-production.up.railway.app/api/rias/enrich")
+          echo "Batch 4 HTTP status: $response"
+          if [ "$response" != "200" ]; then exit 1; fi
+
+      - name: Check enrichment stats
+        run: |
+          echo "Enrichment progress:"
+          curl -s \
+            -H "Authorization: Bearer ${{ secrets.INGEST_SECRET }}" \
+            "https://pciq-production.up.railway.app/api/rias/stats"

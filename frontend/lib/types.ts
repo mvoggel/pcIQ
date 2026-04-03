@@ -91,6 +91,7 @@ export interface ConfirmedRia {
   private_fund_aum: number | null;
   num_advisors: number | null;
   matched_platforms: string[];   // which platform(s) created the match
+  source: string;                // "csv" | "scrape" | "edgar_inferred"
 }
 
 export interface FundEnrichment {

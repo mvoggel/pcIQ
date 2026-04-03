@@ -127,7 +127,7 @@ def fetch_confirmed_allocators(
     # Step 2: RIA CRDs registered on tracked platforms.
     # fund_platforms stores full legal names ("iCapital Markets LLC") while
     # ria_platforms stores brand names ("iCapital") — do a substring match.
-    rp_all = db.table("ria_platforms").select("crd_number, platform_name").execute()
+    rp_all = db.table("ria_platforms").select("crd_number, platform_name, source").execute()
     if not rp_all.data:
         return []
 
@@ -144,10 +144,18 @@ def fetch_confirmed_allocators(
     if not rp_result_data:
         return []
 
-    # Index: crd → [platform1, platform2, ...]
+    # Index: crd → platforms list + highest-confidence source
+    # Priority: csv (confirmed directory) > scrape > edgar_inferred (broad inference)
+    _SOURCE_RANK = {"csv": 3, "scrape": 2, "edgar_inferred": 1}
     crd_to_platforms: dict[str, list[str]] = {}
+    crd_to_source: dict[str, str] = {}
     for r in rp_result_data:
-        crd_to_platforms.setdefault(r["crd_number"], []).append(r["platform_name"])
+        crd = r["crd_number"]
+        crd_to_platforms.setdefault(crd, []).append(r["platform_name"])
+        new_src = r.get("source") or "edgar_inferred"
+        cur_src = crd_to_source.get(crd, "edgar_inferred")
+        if _SOURCE_RANK.get(new_src, 0) > _SOURCE_RANK.get(cur_src, 0):
+            crd_to_source[crd] = new_src
 
     platform_crds = list(crd_to_platforms.keys())
 
@@ -181,6 +189,7 @@ def fetch_confirmed_allocators(
     results = []
     for row in (ria_result.data or []):
         row["matched_platforms"] = crd_to_platforms.get(row["crd_number"], [])
+        row["source"] = crd_to_source.get(row["crd_number"], "edgar_inferred")
         results.append(row)
 
     return results

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Signal } from "@/lib/types";
 import FundModal from "./FundModal";
 
@@ -91,12 +91,33 @@ function PlatformBadges({ platforms, known }: { platforms: string[]; known: stri
 }
 
 function InfoTooltip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent | TouchEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("touchstart", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("touchstart", close);
+    };
+  }, [open]);
+
   return (
-    <span className="relative group inline-flex items-center ml-1.5 align-middle">
-      <span className="w-3.5 h-3.5 rounded-full border border-slate-400 text-slate-400 text-[9px] flex items-center justify-center cursor-help font-bold select-none">
+    <span ref={ref} className="relative inline-flex items-center ml-1.5 align-middle">
+      <span
+        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        className="w-3.5 h-3.5 rounded-full border border-slate-400 text-slate-400 text-[9px] flex items-center justify-center cursor-pointer font-bold select-none"
+      >
         i
       </span>
-      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-60 bg-slate-800 text-white text-xs rounded-lg px-3 py-2 leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-xl normal-case tracking-normal font-normal whitespace-normal">
+      <span className={`pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-60 bg-slate-800 text-white text-xs rounded-lg px-3 py-2 leading-relaxed transition-opacity z-50 shadow-xl normal-case tracking-normal font-normal whitespace-normal ${open ? "opacity-100" : "opacity-0"}`}>
         {text}
         <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
       </span>

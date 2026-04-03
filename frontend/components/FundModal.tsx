@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ClientType, ConfirmedRia, FundEnrichment, ManagerIntelligence, RiaMatch, Signal } from "@/lib/types";
 import { fetchFundDetail } from "@/lib/api";
 
@@ -305,6 +305,16 @@ function ConfirmedRiaRow({ ria }: { ria: ConfirmedRia }) {
               {p}
             </span>
           ))}
+          {ria.source === "csv" && (
+            <span title="Confirmed: sourced from platform advisor directory" className="text-xs px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200 whitespace-nowrap font-medium">
+              ✓ confirmed
+            </span>
+          )}
+          {ria.source === "edgar_inferred" && (
+            <span title="Inferred from EDGAR feeder fund data — not directly confirmed by platform directory" className="text-xs px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200 whitespace-nowrap">
+              EDGAR inferred
+            </span>
+          )}
           {privatePct != null && privatePct > 0 && (
             <span className="text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 whitespace-nowrap">
               {privatePct}% private funds
@@ -337,15 +347,36 @@ function ConfirmedRiaRow({ ria }: { ria: ConfirmedRia }) {
 }
 
 function InfoTooltip({ text, color = "slate" }: { text: string; color?: "slate" | "emerald" }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
   const badge = color === "emerald"
     ? "bg-emerald-200 text-emerald-800"
     : "bg-slate-200 text-slate-600";
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent | TouchEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("touchstart", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("touchstart", close);
+    };
+  }, [open]);
+
   return (
-    <span className="relative group inline-flex items-center ml-1 cursor-default">
-      <span className={`w-3.5 h-3.5 rounded-full ${badge} text-[9px] font-bold inline-flex items-center justify-center leading-none select-none`}>
+    <span ref={ref} className="relative inline-flex items-center ml-1">
+      <span
+        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        className={`w-3.5 h-3.5 rounded-full ${badge} text-[9px] font-bold inline-flex items-center justify-center leading-none select-none cursor-pointer`}
+      >
         i
       </span>
-      <span className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 bg-slate-800 text-white text-xs rounded-lg px-3 py-2 leading-relaxed shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+      <span className={`absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 bg-slate-800 text-white text-xs rounded-lg px-3 py-2 leading-relaxed shadow-lg transition-opacity pointer-events-none z-50 ${open ? "opacity-100" : "opacity-0"}`}>
         <span className="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-slate-800" />
         {text}
       </span>

@@ -1,6 +1,8 @@
 name: EDGAR ingestion
 
 on:
+  schedule:
+    - cron: "0 12 * * *"   # Daily 8am ET (12:00 UTC)
   workflow_dispatch:
     inputs:
       days:
