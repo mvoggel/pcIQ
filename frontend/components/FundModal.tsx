@@ -481,6 +481,15 @@ export default function FundModal({ signal, onClose }: Props) {
   const [loadingDetail, setLoadingDetail] = useState(true);
   const [detailError, setDetailError] = useState(false);
 
+  // Lock body scroll while modal is open.
+  // This prevents iOS Safari from drifting the viewport horizontally
+  // when the user scrolls inside the modal.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -506,7 +515,7 @@ export default function FundModal({ signal, onClose }: Props) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/40" />
       <div
-        className="relative bg-white rounded-xl shadow-2xl w-full max-w-xl max-h-[92vh] overflow-y-auto"
+        className="relative bg-white rounded-xl shadow-2xl w-full max-w-xl max-h-[92vh] overflow-y-auto overscroll-y-contain"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Header ── */}
