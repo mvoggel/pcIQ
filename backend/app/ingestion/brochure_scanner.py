@@ -81,7 +81,7 @@ _PLATFORM_OWN_NAMES = {
 
 # ── endpoints ─────────────────────────────────────────────────────────────────
 
-_IAPD_SEARCH  = "https://api.adviserinfo.sec.gov/search/firm"
+_IAPD_SUMMARY = "https://www.adviserinfo.sec.gov/firm/summary"   # HTML page, has brochure link
 _IAPD_FILES   = "https://files.adviserinfo.sec.gov/IAPD/Content/Common/crd_iapd_Brochure.aspx"
 
 _IAPD_HEADERS = {
@@ -89,7 +89,7 @@ _IAPD_HEADERS = {
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
     ),
-    "Accept": "application/json, text/plain, */*",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Referer": "https://www.adviserinfo.sec.gov/",
     "Origin":  "https://www.adviserinfo.sec.gov",
 }
@@ -152,33 +152,28 @@ async def _load_all_crds() -> list[tuple[str, str]]:
 
 async def _get_brochure_version_id(crd: str, client: httpx.AsyncClient) -> str | None:
     """
-    Query IAPD search for a CRD and extract the Part 2A brochure version ID.
-    The IAPD search endpoint returns brochure metadata in _source.
-    Returns version ID string or None if not available.
+    Scrape the public IAPD firm summary HTML page to extract the Part 2A
+    brochure version ID from the "Download Brochure" link href.
+
+    URL: https://www.adviserinfo.sec.gov/firm/summary/{crd}
+    This is a standard public page — no auth, no IP restriction.
+
+    The page contains a link like:
+      href=".../crd_iapd_Brochure.aspx?BRCHR_VRSN_ID=12345678"
+    We regex-extract the BRCHR_VRSN_ID value and return it.
     """
-    params = {"query": crd, "hl": "false", "nrows": "5", "start": "0"}
+    url = f"{_IAPD_SUMMARY}/{crd}"
     try:
-        resp = await client.get(_IAPD_SEARCH, headers=_IAPD_HEADERS, params=params, timeout=10)
+        resp = await client.get(url, headers=_IAPD_HEADERS, timeout=12, follow_redirects=True)
         if resp.status_code != 200:
             return None
         await asyncio.sleep(_DELAY)
-        data = resp.json()
-        hits = data.get("hits", {}).get("hits", [])
-        for hit in hits:
-            src = hit.get("_source", {})
-            # Only accept an exact CRD match
-            if str(src.get("firm_source_id", "")) != str(crd):
-                continue
-            # IAPD field names vary — try all known paths
-            vid = (
-                src.get("brchr_vrsn_id")
-                or src.get("brochure_version_id")
-                or src.get("latestBrochureVersionId")
-                or src.get("brochureVersionId")
-                or src.get("firm_brochure_id")
-            )
-            if vid:
-                return str(vid)
+        html = resp.text
+        # IAPD embeds brochure links as:
+        #   BRCHR_VRSN_ID=12345678  (in href and in onclick attributes)
+        match = re.search(r"BRCHR_VRSN_ID=(\d+)", html, re.IGNORECASE)
+        if match:
+            return match.group(1)
     except Exception:
         pass
     return None
@@ -248,15 +243,35 @@ async def probe(crd: str) -> None:
     """
     print(f"\nProbing CRD {crd}...\n")
     async with httpx.AsyncClient() as client:
-        print("  Step 1: fetching brochure version ID from IAPD search...")
+        # Show raw HTML around brochure links for debugging
+        print(f"  Step 1: fetching IAPD firm summary page...")
+        url = f"{_IAPD_SUMMARY}/{crd}"
+        try:
+            resp = await client.get(url, headers=_IAPD_HEADERS, timeout=12, follow_redirects=True)
+            print(f"  HTTP {resp.status_code}  |  {len(resp.text):,} chars")
+            # Show any BRCHR_VRSN_ID references in the page
+            matches = re.findall(r".{0,60}BRCHR_VRSN_ID.{0,60}", resp.text, re.IGNORECASE)
+            if matches:
+                print(f"  Found {len(matches)} brochure version ID reference(s) in HTML:")
+                for m in matches[:3]:
+                    print(f"    {m.strip()}")
+            else:
+                print("  No BRCHR_VRSN_ID found in page HTML.")
+                # Show a snippet to understand what the page looks like
+                snippet = resp.text[:800].replace("\n", " ").replace("\r", "")
+                print(f"\n  Page snippet (first 800 chars):\n  {snippet}\n")
+        except Exception as exc:
+            print(f"  ✗  Page fetch failed: {exc}")
+            return
+
+        print(f"\n  Step 2: extracting version ID...")
         vid = await _get_brochure_version_id(crd, client)
         if not vid:
-            print("  ✗  No brochure version ID found in IAPD search response.")
+            print("  ✗  No brochure version ID extracted.")
             print("     Possible reasons:")
-            print("     - Firm is state-registered (no IAPD record)")
-            print("     - Firm has no Part 2A on file")
-            print("     - CRD not found in IAPD search results")
-            print("\n  Try a different CRD, e.g. a large NY firm you know uses iCapital.")
+            print("     - Firm is state-registered (no IAPD brochure on file)")
+            print("     - Page structure has changed — check snippet above")
+            print("     - CRD not found / redirected away")
             return
 
         print(f"  ✓  Brochure version ID: {vid}")
