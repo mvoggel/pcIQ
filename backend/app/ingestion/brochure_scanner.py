@@ -1,41 +1,39 @@
 """
-ADV brochure platform scanner.
+ADV Part 2A brochure platform scanner.
 
-Scans Form ADV filings on EDGAR for mentions of alternative investment platforms
-(iCapital, CAIS, Altigo, etc.) and writes confirmed platform relationships to
-ria_platforms with source='adv_brochure'.
+Scans Form ADV Part 2A brochures (the plain-English narrative each RIA files
+annually with the SEC) for mentions of iCapital, CAIS, Altigo, etc.
 
-HOW IT WORKS
-────────────
-RIAs are required to file Form ADV annually with the SEC. Part 2A (the "brochure")
-is a plain-English narrative where advisors describe their business — including which
-technology platforms and distribution networks they use. A sentence like:
-
-  "We use iCapital Network to facilitate client subscriptions to private funds."
-
-…is a self-reported, SEC-filed statement. That's a meaningful signal — higher
-confidence than our EDGAR feeder fund inference, lower than a verified directory CSV.
-
-TWO COMPLEMENTARY PASSES
-────────────────────────
-Pass 1 — EDGAR EFTS bulk search (fast, ~2–5 min):
-  Search EDGAR full-text index for ADV filings containing each keyword.
-  Returns CIKs → resolve to CRDs via EDGAR submissions API → cross-reference
-  against our rias table. Catches firms that uploaded their Part 2A to EDGAR.
-
-Pass 2 — Direct IAPD brochure fetch (thorough, ~30–60 min):
-  For RIAs in our rias table NOT caught by Pass 1, fetches their Part 2A brochure
-  PDF directly from the IAPD file server and scans for keywords. Catches firms whose
-  brochures live on IARD but aren't indexed in EDGAR EFTS.
+A sentence like "We use iCapital Network to facilitate client subscriptions to
+private funds" is a self-reported, SEC-filed statement — higher confidence than
+our EDGAR feeder fund inference, lower than a verified directory CSV.
 
 Source tag written: 'adv_brochure'
-Confidence vs other sources: csv > adv_brochure > scrape > edgar_inferred
+Confidence ranking: csv > adv_brochure > scrape > edgar_inferred
+
+WHY PASS 1 (EDGAR EFTS) DOESN'T WORK
+──────────────────────────────────────
+EDGAR EFTS indexes filings submitted directly to EDGAR.gov. But ADV Part 2A
+brochures are filed through IARD (FINRA's system) and published on IAPD — they
+never touch EDGAR's full-text index. Confirmed via live test: zero hits for any
+platform keyword. We skip Pass 1 entirely.
+
+HOW PASS 2 WORKS (IAPD direct fetch)
+──────────────────────────────────────
+For each CRD in our rias table:
+  1. Hit IAPD search API to get the current Part 2A brochure version ID
+  2. Download the brochure PDF from files.adviserinfo.sec.gov
+  3. Scan text for platform keywords
+  4. Write matches to ria_platforms with source='adv_brochure'
+
+Runs from local — no Railway IP needed. The IAPD search endpoint and brochure
+file server have no IP restriction (unlike the firm detail /summary/{crd} endpoint).
 
 Usage:
-    make scan-brochures              # full scan (both passes)
-    make scan-brochures DRY=1        # dry run — no DB writes, just print matches
-    python -m app.ingestion.brochure_scanner --pass1-only   # EDGAR EFTS only
-    python -m app.ingestion.brochure_scanner --pass2-only   # direct fetch only
+    make scan-brochures             # full scan
+    make scan-brochures DRY=1       # dry run — print matches, no DB writes
+    make scan-brochures V=1         # verbose — show each match as it's found
+    python -m app.ingestion.brochure_scanner --probe 123456   # test one CRD
     python -m app.ingestion.brochure_scanner --dry-run
 """
 
@@ -57,39 +55,35 @@ from app.db.writer import upsert_ria_platform
 
 # ── platforms to scan for ─────────────────────────────────────────────────────
 
-# Each entry: search_phrase → canonical platform name in ria_platforms
-# Longer / more-specific phrases are checked first to avoid sub-string confusion.
+# Checked in order — longer/more-specific phrases first to avoid sub-match confusion.
+# dict preserves insertion order (Python 3.7+).
 PLATFORM_PHRASES: dict[str, str] = {
-    "iCapital Network":    "iCapital",
-    "iCapital":            "iCapital",
-    "CAIS Group":          "CAIS",
-    "CAIS platform":       "CAIS",
-    "caisgroup.com":       "CAIS",
-    "CAIS":                "CAIS",
-    "Altigo":              "Altigo",
-    "SEI Access":          "Altigo",   # Altigo was rebranded to SEI Access in 2024
-    "Halo Investing":      "Halo",
-    "Halo platform":       "Halo",
-    "InvestX":             "InvestX",
-    "Artivest":            "Artivest",
+    "iCapital Network":  "iCapital",
+    "icapitalnetwork":   "iCapital",
+    "iCapital":          "iCapital",
+    "CAIS Group":        "CAIS",
+    "caisgroup.com":     "CAIS",
+    "CAIS platform":     "CAIS",
+    "CAIS":              "CAIS",
+    "SEI Access":        "Altigo",   # Altigo rebranded → SEI Access in late 2023
+    "Altigo":            "Altigo",
+    "Halo Investing":    "Halo",
+    "Halo platform":     "Halo",
+    "InvestX":           "InvestX",
+    "Artivest":          "Artivest",
 }
 
-# Canonical platform names that ARE themselves platforms — exclude self-matches
-# (e.g. iCapital's own ADV filing should not create an iCapital→iCapital row)
+# Firms whose own name IS a platform — skip (don't tag iCapital as an iCapital partner)
 _PLATFORM_OWN_NAMES = {
-    "icapital", "cais group", "altigo", "sei access", "halo investing", "investx", "artivest",
+    "icapital", "cais", "altigo", "sei access", "halo investing",
+    "investx", "artivest",
 }
 
-# EDGAR endpoints — same infrastructure used by run_feeder.py and edgar_client.py
-_EFTS_BASE        = "https://efts.sec.gov"
-_SUBMISSIONS_BASE = "https://data.sec.gov"
-_IAPD_FILES_BASE  = "https://files.adviserinfo.sec.gov"
-_IAPD_API_BASE    = "https://api.adviserinfo.sec.gov"
+# ── endpoints ─────────────────────────────────────────────────────────────────
 
-_EDGAR_HEADERS = {
-    "User-Agent": settings.edgar_user_agent,
-    "Accept": "application/json",
-}
+_IAPD_SEARCH  = "https://api.adviserinfo.sec.gov/search/firm"
+_IAPD_FILES   = "https://files.adviserinfo.sec.gov/IAPD/Content/Common/crd_iapd_Brochure.aspx"
+
 _IAPD_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -97,347 +91,266 @@ _IAPD_HEADERS = {
     ),
     "Accept": "application/json, text/plain, */*",
     "Referer": "https://www.adviserinfo.sec.gov/",
-    "Origin": "https://www.adviserinfo.sec.gov",
+    "Origin":  "https://www.adviserinfo.sec.gov",
 }
 
-_CONCURRENCY = 8
-_DELAY       = 0.15    # seconds between requests (SEC rate limit: max 10 req/s)
+_CONCURRENCY = 5    # parallel brochure fetches — conservative for IAPD
+_DELAY       = 0.2  # seconds between requests
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-def _canonical_platform(text: str) -> str | None:
-    """
-    Check text for known platform phrases. Returns canonical platform name or None.
-    Checks longer phrases first (dict insertion order preserved in Python 3.7+).
-    """
+def _scan_text(text: str) -> list[str]:
+    """Return list of canonical platform names found in text. Deduped, ordered."""
+    found: list[str] = []
     lower = text.lower()
     for phrase, canonical in PLATFORM_PHRASES.items():
-        if phrase.lower() in lower:
-            return canonical
-    return None
+        if phrase.lower() in lower and canonical not in found:
+            found.append(canonical)
+    return found
 
 
 def _is_platform_itself(firm_name: str) -> bool:
-    """Return True if the filing is from a platform company, not an RIA using it."""
     lower = firm_name.lower()
     return any(own in lower for own in _PLATFORM_OWN_NAMES)
 
 
-async def _get_json(client: httpx.AsyncClient, url: str, headers: dict, params: dict | None = None) -> dict:
-    resp = await client.get(url, headers=headers, params=params, timeout=20)
-    resp.raise_for_status()
-    await asyncio.sleep(_DELAY)
-    return resp.json()
-
-
-# ── pass 1: EDGAR EFTS bulk search ───────────────────────────────────────────
-
-async def _efts_search_adv(keyword: str, max_hits: int = 500) -> list[dict]:
+async def _load_all_crds() -> list[tuple[str, str]]:
     """
-    Search EDGAR full-text index for ADV filings containing `keyword`.
-    Returns list of {cik, firm_name, accession_no}.
-    Searches last 2 years of filings (Part 2A is filed annually — 2 years
-    ensures we catch firms with December fiscal year ends).
+    Load ALL active RIAs from rias table. Paginates in chunks of 1,000
+    to work around Supabase's default 1,000-row query limit.
+    Returns list of (crd_number, firm_name).
     """
-    url = f"{_EFTS_BASE}/LATEST/search-index"
-    results: list[dict] = []
-    from_offset = 0
-    page_size = 100
+    db = get_db()
+    results: list[tuple[str, str]] = []
+    chunk = 1000
+    start = 0
 
-    async with httpx.AsyncClient() as client:
-        while len(results) < max_hits:
-            params = {
-                "q":                      f'"{keyword}"',
-                "forms":                  "ADV",
-                "dateRange":              "custom",
-                "startdt":                "2024-01-01",
-                "from":                   from_offset,
-                "hits.hits.total.value":  "true",
-            }
-            try:
-                data = await _get_json(client, url, _EDGAR_HEADERS, params)
-            except Exception:
-                break
+    while True:
+        rows = (
+            db.table("rias")
+            .select("crd_number, firm_name")
+            .eq("is_active", True)
+            .range(start, start + chunk - 1)
+            .execute()
+        ).data or []
 
-            hits = data.get("hits", {}).get("hits", [])
-            total = data.get("hits", {}).get("total", {}).get("value", 0)
-            if not hits:
-                break
+        for r in rows:
+            crd = r.get("crd_number", "").strip()
+            name = r.get("firm_name", "").strip()
+            if crd:
+                results.append((crd, name))
 
-            for hit in hits:
-                src = hit.get("_source", {})
-                display_names = src.get("display_names") or []
-                raw_name = display_names[0] if display_names else ""
-                # Strip trailing "(CIK 0001234567)"
-                firm_name = re.sub(r"\s*\(CIK\s*\d+\)\s*$", "", raw_name).strip()
-
-                ciks = src.get("ciks") or []
-                cik = str(ciks[0]).lstrip("0") if ciks else ""
-                accession_no = src.get("adsh", "")
-
-                if not cik:
-                    continue
-                if _is_platform_itself(firm_name):
-                    continue
-
-                results.append({
-                    "cik":          cik,
-                    "firm_name":    firm_name,
-                    "accession_no": accession_no,
-                    "platform":     PLATFORM_PHRASES.get(keyword, keyword),
-                })
-
-            from_offset += page_size
-            if from_offset >= total or from_offset >= max_hits:
-                break
+        if len(rows) < chunk:
+            break   # last page
+        start += chunk
 
     return results
 
 
-async def _cik_to_crd(cik: str, sem: asyncio.Semaphore) -> str | None:
+# ── brochure fetch ────────────────────────────────────────────────────────────
+
+async def _get_brochure_version_id(crd: str, client: httpx.AsyncClient) -> str | None:
     """
-    Resolve a CIK to a CRD number via the EDGAR submissions API.
-    Returns CRD string or None.
+    Query IAPD search for a CRD and extract the Part 2A brochure version ID.
+    The IAPD search endpoint returns brochure metadata in _source.
+    Returns version ID string or None if not available.
     """
-    padded = cik.zfill(10)
-    url = f"{_SUBMISSIONS_BASE}/submissions/CIK{padded}.json"
-    async with sem:
-        try:
-            async with httpx.AsyncClient() as client:
-                data = await _get_json(client, url, _EDGAR_HEADERS)
-            return str(data.get("crdNumber") or "").strip() or None
-        except Exception:
-            return None
-
-
-async def run_pass1(
-    our_crds: set[str],
-    dry_run: bool = False,
-    verbose: bool = False,
-) -> dict[str, list[str]]:
-    """
-    Pass 1: EDGAR EFTS search.
-    Returns dict of {crd → [platform1, platform2, ...]} for RIAs in our DB.
-    """
-    print("\n── Pass 1: EDGAR EFTS full-text search ──────────────────────────────")
-
-    # Collect all EFTS hits per unique keyword phrase
-    all_hits: list[dict] = []
-    seen_cik_platform: set[tuple[str, str]] = set()
-
-    search_phrases = list(dict.fromkeys(PLATFORM_PHRASES.keys()))  # dedupe, preserve order
-    for phrase in search_phrases:
-        canonical = PLATFORM_PHRASES[phrase]
-        try:
-            hits = await _efts_search_adv(phrase, max_hits=500)
-        except Exception as exc:
-            print(f"  ✗  EFTS search failed for '{phrase}': {exc}")
-            continue
-
-        new_hits = 0
-        for h in hits:
-            key = (h["cik"], canonical)
-            if key not in seen_cik_platform:
-                seen_cik_platform.add(key)
-                h["platform"] = canonical
-                all_hits.append(h)
-                new_hits += 1
-
-        if new_hits:
-            print(f"  '{phrase}' → {new_hits} unique CIKs in ADV filings")
-
-    if not all_hits:
-        print("  No EDGAR EFTS hits — Part 2A brochures may not be indexed. Pass 2 will cover these.")
-        return {}
-
-    print(f"\n  Resolving {len(all_hits)} CIKs → CRDs via EDGAR submissions API...")
-    sem = asyncio.Semaphore(_CONCURRENCY)
-
-    async def _resolve(hit: dict) -> tuple[str | None, dict]:
-        crd = await _cik_to_crd(hit["cik"], sem)
-        return crd, hit
-
-    tasks = [asyncio.create_task(_resolve(h)) for h in all_hits]
-    matched: dict[str, list[str]] = defaultdict(list)   # crd → [platforms]
-    resolved = 0
-    in_our_db = 0
-
-    for fut in asyncio.as_completed(tasks):
-        crd, hit = await fut
-        resolved += 1
-        if not crd:
-            continue
-        if crd not in our_crds:
-            continue
-        in_our_db += 1
-        platform = hit["platform"]
-        if platform not in matched[crd]:
-            matched[crd].append(platform)
-            if verbose:
-                print(f"    ✓  CRD {crd} ({hit['firm_name']}) → {platform}")
-
-        print(f"  Resolved {resolved}/{len(all_hits)} | In our DB: {in_our_db}", end="\r", flush=True)
-
-    print()
-    print(f"\n  Pass 1 result: {in_our_db} RIAs in our DB with ADV platform mentions")
-
-    if not dry_run:
-        written = 0
-        for crd, platforms in matched.items():
-            for platform in platforms:
-                try:
-                    upsert_ria_platform(crd, platform, source="adv_brochure")
-                    written += 1
-                except Exception as exc:
-                    if verbose:
-                        print(f"  ✗  DB write failed {crd}/{platform}: {exc}")
-        print(f"  Wrote {written} rows to ria_platforms (source='adv_brochure')")
-    else:
-        print("  Dry run — skipping DB writes")
-
-    return dict(matched)
-
-
-# ── pass 2: direct IAPD brochure PDF fetch ───────────────────────────────────
-
-async def _fetch_brochure_version_id(crd: str) -> str | None:
-    """
-    Try to get the current Part 2A brochure version ID for a CRD via IAPD API.
-    Returns version ID string or None.
-    """
-    # The IAPD search API returns brochure version info in its response
-    url = f"{_IAPD_API_BASE}/search/firm"
-    params = {"query": crd, "hl": "false", "nrows": "1", "start": "0"}
+    params = {"query": crd, "hl": "false", "nrows": "5", "start": "0"}
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(url, headers=_IAPD_HEADERS, params=params)
-            if resp.status_code != 200:
-                return None
-            await asyncio.sleep(_DELAY)
-            data = resp.json()
-            hits = data.get("hits", {}).get("hits", [])
-            for hit in hits:
-                src = hit.get("_source", {})
-                if str(src.get("firm_source_id", "")) == str(crd):
-                    # Look for brochure version ID in known field paths
-                    brochure_id = (
-                        src.get("brochure_version_id")
-                        or src.get("brchr_vrsn_id")
-                        or src.get("latestBrochureVersionId")
-                    )
-                    if brochure_id:
-                        return str(brochure_id)
+        resp = await client.get(_IAPD_SEARCH, headers=_IAPD_HEADERS, params=params, timeout=10)
+        if resp.status_code != 200:
+            return None
+        await asyncio.sleep(_DELAY)
+        data = resp.json()
+        hits = data.get("hits", {}).get("hits", [])
+        for hit in hits:
+            src = hit.get("_source", {})
+            # Only accept an exact CRD match
+            if str(src.get("firm_source_id", "")) != str(crd):
+                continue
+            # IAPD field names vary — try all known paths
+            vid = (
+                src.get("brchr_vrsn_id")
+                or src.get("brochure_version_id")
+                or src.get("latestBrochureVersionId")
+                or src.get("brochureVersionId")
+                or src.get("firm_brochure_id")
+            )
+            if vid:
+                return str(vid)
     except Exception:
         pass
     return None
 
 
-async def _fetch_brochure_pdf_text(version_id: str) -> str | None:
-    """Download the Part 2A brochure PDF and extract its text."""
-    url = (
-        f"{_IAPD_FILES_BASE}/IAPD/Content/Common/"
-        f"crd_iapd_Brochure.aspx?BRCHR_VRSN_ID={version_id}"
-    )
+async def _fetch_brochure_text(version_id: str, client: httpx.AsyncClient) -> str | None:
+    """Download a Part 2A brochure PDF by version ID and extract its text."""
     try:
-        async with httpx.AsyncClient(timeout=25) as client:
-            resp = await client.get(url, headers=_IAPD_HEADERS)
-            if resp.status_code != 200:
-                return None
-            pdf_bytes = resp.content
-        # Parse PDF in thread to avoid blocking the event loop
+        resp = await client.get(
+            _IAPD_FILES,
+            headers=_IAPD_HEADERS,
+            params={"BRCHR_VRSN_ID": version_id},
+            timeout=25,
+        )
+        if resp.status_code != 200:
+            return None
+        pdf_bytes = resp.content
+        if len(pdf_bytes) < 1000:   # not a real PDF — probably an error page
+            return None
+
         def _extract(b: bytes) -> str:
             with pdfplumber.open(io.BytesIO(b)) as pdf:
                 return "\n".join(
                     page.extract_text() or ""
-                    for page in pdf.pages[:30]   # Part 2A rarely exceeds 30 pages
+                    for page in pdf.pages[:30]  # Part 2A rarely exceeds 30 pages
                 )
+
         return await asyncio.to_thread(_extract, pdf_bytes)
     except Exception:
         return None
 
 
-async def _scan_one_brochure(
+async def _scan_one(
     crd: str,
+    firm_name: str,
     sem: asyncio.Semaphore,
-) -> tuple[str, list[str]]:
+    client: httpx.AsyncClient,
+) -> tuple[str, list[str], str]:
     """
-    Fetch and scan the Part 2A brochure for one RIA.
-    Returns (crd, [matched_platforms]).
+    Fetch and scan one RIA's Part 2A brochure.
+    Returns (crd, [matched_platforms], status_reason).
     """
+    if _is_platform_itself(firm_name):
+        return crd, [], "skip:is_platform"
+
     async with sem:
-        version_id = await _fetch_brochure_version_id(crd)
+        version_id = await _get_brochure_version_id(crd, client)
         if not version_id:
-            return crd, []
+            return crd, [], "no_brochure_id"
 
-        text = await _fetch_brochure_pdf_text(version_id)
+        text = await _fetch_brochure_text(version_id, client)
         if not text:
-            return crd, []
+            return crd, [], "pdf_fetch_failed"
 
-        found: list[str] = []
-        for phrase, canonical in PLATFORM_PHRASES.items():
-            if phrase.lower() in text.lower() and canonical not in found:
-                found.append(canonical)
-
-        return crd, found
+        found = _scan_text(text)
+        return crd, found, f"scanned:{len(text)}chars"
 
 
-async def run_pass2(
-    our_crds: set[str],
-    already_found: set[str],   # CRDs matched in pass 1 — skip if already confirmed
-    dry_run: bool = False,
-    verbose: bool = False,
-) -> dict[str, list[str]]:
+# ── probe mode ───────────────────────────────────────────────────────────────
+
+async def probe(crd: str) -> None:
     """
-    Pass 2: direct IAPD brochure PDF fetch for RIAs not caught by Pass 1.
+    Test the full pipeline for a single CRD. Prints every step.
+    Use this to verify the brochure fetch works before running on all RIAs.
+
+    Usage:  python -m app.ingestion.brochure_scanner --probe 123456
     """
-    remaining = [c for c in our_crds if c not in already_found]
-    print(f"\n── Pass 2: Direct IAPD brochure scan ({len(remaining)} RIAs) ──────────────")
+    print(f"\nProbing CRD {crd}...\n")
+    async with httpx.AsyncClient() as client:
+        print("  Step 1: fetching brochure version ID from IAPD search...")
+        vid = await _get_brochure_version_id(crd, client)
+        if not vid:
+            print("  ✗  No brochure version ID found in IAPD search response.")
+            print("     Possible reasons:")
+            print("     - Firm is state-registered (no IAPD record)")
+            print("     - Firm has no Part 2A on file")
+            print("     - CRD not found in IAPD search results")
+            print("\n  Try a different CRD, e.g. a large NY firm you know uses iCapital.")
+            return
 
-    if not remaining:
-        print("  All RIAs already covered by Pass 1.")
-        return {}
+        print(f"  ✓  Brochure version ID: {vid}")
+        print(f"\n  Step 2: downloading brochure PDF...")
+        text = await _fetch_brochure_text(vid, client)
+        if not text:
+            print("  ✗  PDF download or parse failed.")
+            return
 
-    est_min = len(remaining) * 2 // (_CONCURRENCY * 60)
-    print(f"  Estimated time: ~{max(1, est_min)} min  |  concurrency={_CONCURRENCY}")
-    print(f"  (Many will return quickly — state-registered firms have no IAPD brochure)\n")
+        print(f"  ✓  Extracted {len(text):,} characters from PDF")
+        print(f"\n  Step 3: scanning for platform keywords...")
+        found = _scan_text(text)
+        if found:
+            print(f"  ✓  PLATFORMS FOUND: {found}")
+        else:
+            print("  —  No platform keywords found in this brochure.")
+
+        # Show a snippet of text around any matches for verification
+        for phrase in PLATFORM_PHRASES:
+            idx = text.lower().find(phrase.lower())
+            if idx != -1:
+                snippet = text[max(0, idx-80):idx+120].replace("\n", " ")
+                print(f'\n  Context for "{phrase}":\n    "...{snippet}..."')
+
+
+# ── main scan ────────────────────────────────────────────────────────────────
+
+async def run(dry_run: bool = False, verbose: bool = False) -> None:
+    print(f"\npcIQ ADV brochure scanner  |  dry_run={dry_run}")
+
+    all_rias = await _load_all_crds()
+    print(f"  {len(all_rias):,} active RIAs loaded from DB (paginated)\n")
 
     sem = asyncio.Semaphore(_CONCURRENCY)
     matched: dict[str, list[str]] = defaultdict(list)
-    total = len(remaining)
-    done = 0
-    hits = 0
-    start = time.monotonic()
+    total  = len(all_rias)
+    done   = 0
+    hits   = 0
+    no_id  = 0
+    start  = time.monotonic()
 
-    async def _staggered(crd: str, i: int):
-        await asyncio.sleep(i * 0.05)   # gentle stagger
-        return await _scan_one_brochure(crd, sem)
+    # Single shared client for the whole run — reuses connections
+    async with httpx.AsyncClient() as client:
 
-    tasks = [asyncio.create_task(_staggered(crd, i)) for i, crd in enumerate(remaining)]
+        async def _staggered(crd: str, name: str, i: int):
+            await asyncio.sleep(i * 0.05)
+            return await _scan_one(crd, name, sem, client)
 
-    for fut in asyncio.as_completed(tasks):
-        crd, platforms = await fut
-        done += 1
-        if platforms:
-            hits += 1
-            matched[crd] = platforms
-            if verbose:
-                print(f"\n  ✓  CRD {crd} → {', '.join(platforms)}")
+        tasks = [
+            asyncio.create_task(_staggered(crd, name, i))
+            for i, (crd, name) in enumerate(all_rias)
+        ]
 
-        elapsed = time.monotonic() - start
-        rate = done / elapsed if elapsed > 0 else 1
-        eta_s = (total - done) / rate if rate > 0 else 0
-        bar = "█" * int(30 * done / total) + "░" * (30 - int(30 * done / total))
-        print(
-            f"  [{bar}] {done/total*100:4.0f}%  {hits} matches  eta {eta_s/60:.0f}m",
-            end="\r", flush=True,
-        )
+        for fut in asyncio.as_completed(tasks):
+            crd, platforms, reason = await fut
+            done += 1
+            if reason == "no_brochure_id":
+                no_id += 1
+            if platforms:
+                hits += 1
+                matched[crd] = platforms
+                if verbose:
+                    print(f"\n  ✓  CRD {crd} → {', '.join(platforms)}")
+
+            elapsed = time.monotonic() - start
+            rate    = done / elapsed if elapsed > 0 else 1
+            eta_s   = (total - done) / rate if rate > 0 else 0
+            bar     = "█" * int(30 * done / total) + "░" * (30 - int(30 * done / total))
+            print(
+                f"  [{bar}] {done/total*100:4.0f}%  "
+                f"{hits} matches  {no_id} no-brochure  "
+                f"eta {eta_s/60:.0f}m",
+                end="\r", flush=True,
+            )
 
     elapsed = time.monotonic() - start
-    print(f"\n\n  Pass 2 result: {hits} additional RIAs with brochure platform mentions")
+    print(f"\n\n{'─'*60}")
     print(f"  Completed in {elapsed/60:.1f} min")
+    print(f"  RIAs scanned:     {total:,}")
+    print(f"  With brochure:    {total - no_id:,}")
+    print(f"  Platform matches: {hits:,}")
+    print(f"  No IAPD brochure: {no_id:,} (state-registered or exempt — expected)")
+
+    if matched:
+        print(f"\n  Matches by platform:")
+        counts: dict[str, int] = defaultdict(int)
+        for platforms in matched.values():
+            for p in platforms:
+                counts[p] += 1
+        for p, n in sorted(counts.items(), key=lambda x: -x[1]):
+            print(f"    {p}: {n}")
 
     if not dry_run and matched:
+        print(f"\n  Writing {sum(len(v) for v in matched.values())} rows to ria_platforms...")
         written = 0
         for crd, platforms in matched.items():
             for platform in platforms:
@@ -447,69 +360,35 @@ async def run_pass2(
                 except Exception as exc:
                     if verbose:
                         print(f"  ✗  DB write {crd}/{platform}: {exc}")
-        print(f"  Wrote {written} rows to ria_platforms (source='adv_brochure')")
+        print(f"  ✓  {written} rows written (source='adv_brochure')")
+        print(f"  These appear in FundModal Confirmed Allocators.")
     elif dry_run and matched:
-        print("  Dry run — skipping DB writes")
+        print(f"\n  Dry run — no DB writes. Re-run without DRY=1 to persist.")
 
-    return dict(matched)
-
-
-# ── main ─────────────────────────────────────────────────────────────────────
-
-async def run(
-    pass1: bool = True,
-    pass2: bool = True,
-    dry_run: bool = False,
-    verbose: bool = False,
-) -> None:
-    db = get_db()
-
-    # Load all CRD numbers from our rias table
-    rows = db.table("rias").select("crd_number").eq("is_active", True).execute()
-    our_crds: set[str] = {r["crd_number"] for r in (rows.data or []) if r.get("crd_number")}
-    print(f"\npcIQ ADV brochure scanner")
-    print(f"  {len(our_crds):,} active RIAs in DB | dry_run={dry_run} | pass1={pass1} | pass2={pass2}")
-
-    p1_matched: dict[str, list[str]] = {}
-    if pass1:
-        p1_matched = await run_pass1(our_crds, dry_run=dry_run, verbose=verbose)
-
-    p2_matched: dict[str, list[str]] = {}
-    if pass2:
-        already_confirmed = set(p1_matched.keys())
-        p2_matched = await run_pass2(our_crds, already_confirmed, dry_run=dry_run, verbose=verbose)
-
-    # Summary
-    all_matched = {**p1_matched, **p2_matched}
-    platform_counts: dict[str, int] = defaultdict(int)
-    for platforms in all_matched.values():
-        for p in platforms:
-            platform_counts[p] += 1
-
-    print(f"\n{'─'*60}")
-    print(f"  Total RIAs with brochure platform mentions: {len(all_matched)}")
-    for platform, count in sorted(platform_counts.items(), key=lambda x: -x[1]):
-        print(f"    {platform}: {count}")
-    if not dry_run and all_matched:
-        print(f"\n  All written to ria_platforms with source='adv_brochure'")
-        print(f"  These will appear in FundModal Confirmed Allocators section.")
     print()
 
 
+# ── entry point ───────────────────────────────────────────────────────────────
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="pcIQ — ADV Part 2 brochure platform scanner"
+        description="pcIQ — ADV Part 2A brochure platform scanner"
     )
-    parser.add_argument("--pass1-only", action="store_true", help="EDGAR EFTS search only")
-    parser.add_argument("--pass2-only", action="store_true", help="Direct brochure fetch only")
-    parser.add_argument("--dry-run",    action="store_true", help="No DB writes")
+    parser.add_argument(
+        "--probe", metavar="CRD",
+        help="Test the full pipeline for a single CRD number and exit"
+    )
+    parser.add_argument("--dry-run",  action="store_true", help="No DB writes")
     parser.add_argument("--verbose", "-v", action="store_true", help="Print each match")
+    # Legacy flags kept for Makefile compatibility — ignored now that Pass 1 is removed
+    parser.add_argument("--pass1-only", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--pass2-only", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
 
-    p1 = not args.pass2_only
-    p2 = not args.pass1_only
-
-    asyncio.run(run(pass1=p1, pass2=p2, dry_run=args.dry_run, verbose=args.verbose))
+    if args.probe:
+        asyncio.run(probe(args.probe))
+    else:
+        asyncio.run(run(dry_run=args.dry_run, verbose=args.verbose))
 
 
 if __name__ == "__main__":

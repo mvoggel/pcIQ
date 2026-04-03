@@ -84,10 +84,15 @@ enrich-rias:
 #   make scan-brochures DRY=1       # dry run — print matches, no DB writes
 scan-brochures:
 	$(PYTHON) -m app.ingestion.brochure_scanner \
-	  $(if $(filter 1,$(PASS)),--pass1-only,) \
-	  $(if $(filter 2,$(PASS)),--pass2-only,) \
 	  $(if $(DRY),--dry-run,) \
 	  $(if $(V),--verbose,)
+
+# Test the brochure fetch for one specific CRD before running the full scan.
+# Pick a large firm you know uses iCapital/CAIS (e.g. a big NY wealth manager).
+#   make probe-brochure CRD=123456
+probe-brochure:
+	@test -n "$(CRD)" || (echo "ERROR: set CRD=<number>  e.g. make probe-brochure CRD=123456" && exit 1)
+	$(PYTHON) -m app.ingestion.brochure_scanner --probe $(CRD)
 
 # ── Platform intelligence pipeline ───────────────────────────────────────────
 # Step 1: scrape EDGAR for iCapital/CAIS/etc. access vehicle Form D filings
