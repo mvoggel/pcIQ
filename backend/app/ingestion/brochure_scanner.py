@@ -88,7 +88,7 @@ def _is_platform_itself(firm_name: str) -> bool:
 
 _RAILWAY_URL     = os.getenv("RAILWAY_URL", "https://pciq-production.up.railway.app")
 _ENDPOINT        = "/api/rias/scan-brochures"
-_BATCH_WAIT_S    = 65   # seconds to wait after each batch (Railway background task)
+_BATCH_WAIT_S    = 3    # seconds between calls (Railway now runs synchronously — no extra wait needed)
 
 
 async def _trigger_batch(client: httpx.AsyncClient, token: str) -> dict | None:
@@ -169,9 +169,10 @@ async def run(dry_run: bool = False, verbose: bool = False) -> None:
         print("  ✓ All RIAs already brochure-scanned — nothing to do!\n")
         return
 
-    print(f"  Batch size: 15 RIAs/call | wait: {_BATCH_WAIT_S}s between calls")
-    print(f"  Estimated calls: {max(1, unscanned // 15):,}")
-    print(f"  Estimated time:  {max(1, unscanned // 15) * _BATCH_WAIT_S // 60:.0f}–{max(1, unscanned // 15) * _BATCH_WAIT_S * 2 // 60:.0f} min")
+    est_calls = max(1, unscanned // 15)
+    print(f"  Batch size: 15 RIAs/call (Railway synchronous — response includes real stats)")
+    print(f"  Estimated calls: {est_calls:,}")
+    print(f"  Estimated time:  {est_calls * 40 // 60:.0f}–{est_calls * 90 // 60:.0f} min  (~40–90s/batch)")
     print(f"  Safe to interrupt (Ctrl-C) — Railway stamps each scanned RIA\n")
 
     start     = time.monotonic()

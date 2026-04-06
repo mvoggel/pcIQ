@@ -27,7 +27,7 @@ import asyncio
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 
 from app.config import settings
 from app.db.client import get_db
@@ -252,14 +252,14 @@ def _stamp_brochure_scan(db, crd: str) -> None:
 
 @router.post("/scan-brochures")
 async def scan_brochures(
-    background_tasks: BackgroundTasks,
     authorization: str | None = Header(default=None),
 ) -> dict:
     """
     Scan the next 15 RIAs' ADV Part 2A brochures for platform keywords (iCapital, CAIS, etc.).
-    Runs in background after immediate response.
+    Runs synchronously — holds the HTTP connection open until the batch completes (~30–60s),
+    then returns actual scanned/hits counts so the local driver can display real progress.
 
-    Call repeatedly (with 60s gaps to let batches complete) until all RIAs are scanned.
+    Call repeatedly until all RIAs are stamped with brochure_scanned_at.
     Matches are written to ria_platforms with source='adv_brochure'.
 
     Requires brochure_scanned_at column on rias table (nullable TIMESTAMPTZ).
@@ -270,12 +270,5 @@ async def scan_brochures(
              -H "Authorization: Bearer <INGEST_SECRET>"
     """
     _check_token(authorization)
-    background_tasks.add_task(_scan_brochure_batch)
-    return {
-        "status": "started",
-        "batch": _BROCHURE_BATCH,
-        "message": (
-            f"Scanning next {_BROCHURE_BATCH} RIA brochures in background. "
-            "Wait 60s then call again. Matches written to ria_platforms (source=adv_brochure)."
-        ),
-    }
+    result = await _scan_brochure_batch()
+    return {"status": "ok", **result}
