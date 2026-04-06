@@ -67,22 +67,22 @@ export default function SignalsPage() {
       <TerritoryTabs territories={TERRITORIES} active={territory} onChange={setTerritory} />
 
       {/* Headline stat bar */}
-      <div className="border-b border-slate-700 bg-slate-800/60">
+      <div className="bg-slate-900 border-b border-blue-500/30">
         <div className="px-4 sm:px-6 py-2 max-w-screen-xl mx-auto flex items-center gap-4 sm:gap-6 overflow-x-auto text-xs text-slate-400 whitespace-nowrap">
           <span>
-            <span className="font-semibold text-white">2,543</span> RIAs tracked
+            <span className="font-semibold text-blue-400">2,543</span> RIAs tracked
           </span>
           <span className="text-slate-600">·</span>
           <span>
-            <span className="font-semibold text-white">$5.6T</span> AUM represented
+            <span className="font-semibold text-blue-400">$5.6T</span> AUM represented
           </span>
           <span className="text-slate-600">·</span>
           <span>
-            <span className="font-semibold text-white">44</span> states
+            <span className="font-semibold text-blue-400">44</span> states
           </span>
           <span className="text-slate-600">·</span>
           <span>
-            <span className="font-semibold text-white">138</span> feeder funds indexed
+            <span className="font-semibold text-blue-400">138</span> feeder funds indexed
           </span>
           <span className="text-slate-600">·</span>
           <span>Built entirely from public SEC data</span>
