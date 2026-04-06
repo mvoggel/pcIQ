@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.advisors import router as advisors_router
 from app.api.cion import router as cion_router
 from app.api.fund import router as fund_router
 from app.api.ingest import router as ingest_router
@@ -25,6 +26,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(advisors_router)
 app.include_router(signals_router)
 app.include_router(fund_router)
 app.include_router(cion_router)

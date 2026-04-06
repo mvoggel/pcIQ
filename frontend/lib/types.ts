@@ -94,6 +94,30 @@ export interface ConfirmedRia {
   source: string;                // "csv" | "scrape" | "edgar_inferred"
 }
 
+export interface AdvisorProfile {
+  crd_number: string;
+  firm_name: string;
+  city: string;
+  state: string;
+  aum: number | null;
+  aum_fmt: string | null;
+  aum_tier: "mega" | "large" | "mid" | "small" | "unknown";
+  private_fund_aum: number | null;
+  private_fund_aum_fmt: string | null;
+  num_advisors: number | null;
+  platforms: string[];
+  platform_count: number;
+  allocation_count_90d: number;
+  activity_score: number;
+}
+
+export interface AdvisorsResponse {
+  territory: string;
+  states: string[];
+  total: number;
+  advisors: AdvisorProfile[];
+}
+
 export interface FundEnrichment {
   cik: string;
   accession_no: string;

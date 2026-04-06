@@ -54,9 +54,10 @@ function RangeBar({
 
 interface Props {
   fund: CionFund;
+  footerLabel?: string;
 }
 
-export default function CionFundCard({ fund }: Props) {
+export default function CionFundCard({ fund, footerLabel }: Props) {
   if (fund.error) {
     return (
       <div className="bg-white rounded-xl border border-slate-200 p-6">
@@ -138,7 +139,7 @@ export default function CionFundCard({ fund }: Props) {
 
       {/* Footer */}
       <p className="text-xs text-slate-300 border-t border-slate-100 pt-3">
-        Source: Yahoo Finance (delayed) · CION Investment Management
+        Source: Yahoo Finance (delayed) · {footerLabel ?? "CION Investment Management"}
       </p>
     </div>
   );

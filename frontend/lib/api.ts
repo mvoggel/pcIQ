@@ -1,6 +1,23 @@
-import { CionFund, FundEnrichment, SignalsResponse } from "./types";
+import { AdvisorsResponse, CionFund, FundEnrichment, SignalsResponse } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+export async function fetchAdvisors(
+  territory: string = "",
+  limit: number = 50
+): Promise<AdvisorsResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (territory) params.set("territory", territory);
+  const res = await fetch(`${API_BASE}/api/advisors?${params}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json();
+}
+
+export async function fetchCompetitorFunds(): Promise<CionFund[]> {
+  const res = await fetch(`${API_BASE}/api/cion/competitors`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json();
+}
 
 export async function fetchCionFunds(): Promise<CionFund[]> {
   const res = await fetch(`${API_BASE}/api/cion/funds`, { cache: "no-store" });

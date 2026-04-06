@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import AppHeader from "@/components/AppHeader";
 import CionFundCard from "@/components/CionFundCard";
-import { fetchCionFunds } from "@/lib/api";
+import { fetchCionFunds, fetchCompetitorFunds } from "@/lib/api";
 import { CionFund } from "@/lib/types";
 
 export default function CionPage() {
@@ -11,11 +11,20 @@ export default function CionPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [competitors, setCompetitors] = useState<CionFund[]>([]);
+  const [competitorsLoading, setCompetitorsLoading] = useState(true);
+  const [competitorsError, setCompetitorsError] = useState<string | null>(null);
+
   useEffect(() => {
     fetchCionFunds()
       .then(setFunds)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+
+    fetchCompetitorFunds()
+      .then(setCompetitors)
+      .catch((e) => setCompetitorsError(e.message))
+      .finally(() => setCompetitorsLoading(false));
   }, []);
 
   return (
@@ -53,16 +62,47 @@ export default function CionPage() {
           </div>
         )}
 
-        {!loading && !error && funds.length > 0 && (
-          <div className="mt-8 bg-blue-50 border border-blue-100 rounded-lg px-5 py-4">
-            <p className="text-sm font-semibold text-blue-800 mb-1">Track competitor registered funds</p>
-            <p className="text-sm text-blue-600 leading-relaxed">
-              pcIQ can monitor NAV, performance, and 52-week ranges for any registered fund — Blackstone BCRED,
-              Blue Owl BCLO, Ares ASIF, and others. Add tickers to expand competitive intelligence beyond
-              Form D private placements.
-            </p>
+        {/* Competitor funds section */}
+        <div className="mt-10">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">Competitor Funds</h2>
+              <p className="text-sm text-slate-500 mt-0.5">
+                Registered interval funds and BDCs competing in the same distribution channels
+              </p>
+            </div>
+            <span className="text-xs text-slate-400 hidden sm:inline">
+              ARCC · ASIF · BCRED · OBDC
+            </span>
           </div>
-        )}
+
+          {competitorsLoading && (
+            <div className="flex items-center justify-center h-32">
+              <div className="w-5 h-5 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
+
+          {competitorsError && !competitorsLoading && (
+            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-red-700 text-sm">
+              <strong>Error:</strong> {competitorsError}
+            </div>
+          )}
+
+          {!competitorsLoading && !competitorsError && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {competitors.map((fund) => (
+                <div key={fund.ticker} className="relative">
+                  <div className="absolute top-3 right-3 z-10">
+                    <span className="text-xs bg-orange-100 text-orange-700 border border-orange-200 rounded px-1.5 py-0.5 font-medium">
+                      Competitor
+                    </span>
+                  </div>
+                  <CionFundCard fund={fund} footerLabel={fund.name} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );

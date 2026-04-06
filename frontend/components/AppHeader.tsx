@@ -13,6 +13,7 @@ export default function AppHeader({ rightSlot }: Props) {
   const navItems = [
     { href: "/signals", label: "Competitive Intel" },
     { href: "/cion", label: "CION Funds" },
+    { href: "/advisors", label: "Advisors" },
   ];
 
   return (

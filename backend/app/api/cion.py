@@ -79,3 +79,46 @@ def get_cion_funds() -> list[dict]:
                 "error": str(e),
             })
     return results
+
+
+# Competitor registered funds — interval funds and BDCs in private credit
+# same distribution channels as CION (iCapital, CAIS, wirehouses)
+COMPETITOR_FUNDS = [
+    {
+        "ticker": "ASIF",
+        "strategy": "Multi-asset credit — investment grade, high yield, loans, CLOs",
+        "focus": "Private Credit",
+    },
+    {
+        "ticker": "BCRED",
+        "strategy": "Diversified credit — senior secured loans, bonds, structured credit",
+        "focus": "Private Credit",
+    },
+    {
+        "ticker": "ARCC",
+        "strategy": "Middle market direct lending — first lien, second lien, subordinated debt",
+        "focus": "Private Credit",
+    },
+    {
+        "ticker": "OBDC",
+        "strategy": "Upper middle market direct lending — senior secured, technology focus",
+        "focus": "Private Credit",
+    },
+]
+
+
+@router.get("/cion/competitors")
+def get_competitor_funds() -> list[dict]:
+    results = []
+    for f in COMPETITOR_FUNDS:
+        try:
+            results.append(_build_fund(f["ticker"], f["strategy"], f["focus"]))
+        except Exception as e:
+            results.append({
+                "ticker": f["ticker"],
+                "name": f["ticker"],
+                "strategy": f["strategy"],
+                "focus": f["focus"],
+                "error": str(e),
+            })
+    return results
