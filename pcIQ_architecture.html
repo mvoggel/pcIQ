@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>pcIQ — Architecture Diagram</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0c0f18;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  color: #e2e8f0;
+  overflow: auto;
+}
+h1 {
+  text-align: center;
+  padding: 16px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #64748b;
+  text-transform: uppercase;
+  border-bottom: 1px solid #1e293b;
+}
+
+#canvas-wrap {
+  position: relative;
+  width: 1780px;
+  height: 1900px;
+  margin: 0 auto;
+}
+
+svg#lines {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* ── CARDS ── */
+.card {
+  position: absolute;
+  border-radius: 7px;
+  padding: 10px 13px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  z-index: 10;
+  cursor: default;
+  width: 195px;
+  border: 1.5px solid transparent;
+  transition: opacity 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+.card .fname {
+  font-weight: 700;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card .fdesc {
+  font-size: 10.5px;
+  opacity: 0.72;
+  margin-top: 3px;
+  line-height: 1.35;
+}
+.card .ftag {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+/* dimmed state (set via JS) */
+.card.dimmed   { opacity: 0.20 !important; transform: none !important; }
+.card.neighbor { opacity: 0.85 !important; }
+.card.focused  { opacity: 1 !important; transform: translateY(-2px);
+                 box-shadow: 0 0 0 2px rgba(255,255,255,0.25), 0 8px 24px rgba(0,0,0,0.6) !important; }
+
+/* SVG path states set via JS */
+svg path.path-dim  { opacity: 0.08 !important; }
+svg path.path-lit  { opacity: 1   !important; stroke-width: 2.5 !important; }
+
+/* ── LAYER PALETTES ── */
+.lyr-cicd    { background:#18120a; border-color:#78350f; color:#fde68a; }
+.lyr-cicd    .ftag { background:#292116; color:#fbbf24; }
+
+.lyr-fe      { background:#080e1f; border-color:#1e3a8a; color:#bfdbfe; }
+.lyr-fe      .ftag { background:#111e40; color:#7dd3fc; }
+
+.lyr-api     { background:#100620; border-color:#6d28d9; color:#ddd6fe; }
+.lyr-api     .ftag { background:#1e0b40; color:#c4b5fd; }
+
+.lyr-core    { background:#041210; border-color:#065f46; color:#a7f3d0; }
+.lyr-core    .ftag { background:#022c22; color:#6ee7b7; }
+
+.lyr-model   { background:#150820; border-color:#86198f; color:#f5d0fe; }
+.lyr-model   .ftag { background:#2e0a3a; color:#e879f9; }
+
+.lyr-signals { background:#03141a; border-color:#0e7490; color:#a5f3fc; }
+.lyr-signals .ftag { background:#062030; color:#67e8f9; }
+
+.lyr-db      { background:#031408; border-color:#166534; color:#86efac; }
+.lyr-db      .ftag { background:#052e16; color:#4ade80; }
+
+.lyr-ingest  { background:#1a1002; border-color:#b45309; color:#fde68a; }
+.lyr-ingest  .ftag { background:#361f00; color:#fcd34d; }
+
+.lyr-ext     { background:#111520; border-color:#334155; color:#cbd5e1; }
+.lyr-ext     .ftag { background:#0a0f1a; color:#94a3b8; }
+
+/* ── REGION BACKGROUNDS ── */
+.region {
+  position: absolute;
+  border-radius: 14px;
+  z-index: 1;
+  border: 1px solid;
+}
+.rg-fe      { background:rgba(30,58,138,0.06); border-color:rgba(30,58,138,0.2); }
+.rg-backend { background:rgba(15,23,42,0.35);  border-color:rgba(51,65,85,0.25); }
+.rg-api     { background:rgba(109,40,217,0.06);border-color:rgba(109,40,217,0.2); }
+.rg-core    { background:rgba(6,95,70,0.06);   border-color:rgba(6,95,70,0.2); }
+.rg-models  { background:rgba(134,25,143,0.06);border-color:rgba(134,25,143,0.2); }
+.rg-signals { background:rgba(14,116,144,0.06);border-color:rgba(14,116,144,0.2); }
+.rg-db      { background:rgba(22,101,52,0.06); border-color:rgba(22,101,52,0.2); }
+.rg-ingest  { background:rgba(180,83,9,0.06);  border-color:rgba(180,83,9,0.2); }
+
+/* ── SECTION LABELS ── */
+.slabel {
+  position: absolute;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  z-index: 12;
+  padding: 3px 10px;
+  border-radius: 4px;
+}
+.sl-cicd    { color:#fbbf24; background:#18120a; border:1px solid #78350f; }
+.sl-fe      { color:#7dd3fc; background:#080e1f; border:1px solid #1e3a8a; }
+.sl-api     { color:#c4b5fd; background:#100620; border:1px solid #6d28d9; }
+.sl-core    { color:#6ee7b7; background:#041210; border:1px solid #065f46; }
+.sl-models  { color:#e879f9; background:#150820; border:1px solid #86198f; }
+.sl-signals { color:#67e8f9; background:#03141a; border:1px solid #0e7490; }
+.sl-db      { color:#4ade80; background:#031408; border:1px solid #166534; }
+.sl-ingest  { color:#fcd34d; background:#1a1002; border:1px solid #b45309; }
+.sl-ext     { color:#94a3b8; background:#111520; border:1px solid #334155; }
+
+/* ── LEGEND ── */
+#legend {
+  position: fixed;
+  bottom: 16px; right: 16px;
+  background: #0c0f18;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 11px 15px;
+  font-size: 10.5px;
+  z-index: 200;
+}
+.leg-title { font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px; font-size:9px; }
+.leg-row   { display:flex; align-items:center; gap:8px; margin-bottom:5px; }
+.leg-dot   { width:10px; height:10px; border-radius:2px; flex-shrink:0; }
+.leg-line  { display:flex; align-items:center; gap:8px; margin-bottom:5px; }
+.leg-hr    { border:none; border-top:1px solid #1e293b; margin:8px 0; }
+</style>
+</head>
+<style>
+#topnav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #1e293b;
+  background: #0c0f18;
+}
+#topnav .nav-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #475569;
+  margin-right: 10px;
+}
+#topnav a {
+  text-decoration: none;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 16px;
+  border-radius: 5px;
+  border: 1px solid #334155;
+  color: #64748b;
+  transition: all 0.15s;
+}
+#topnav a:hover { border-color: #64748b; color: #cbd5e1; }
+#topnav a.active { background: #1e293b; border-color: #475569; color: #e2e8f0; }
+</style>
+<body>
+<div id="topnav">
+  <span class="nav-label">pcIQ Docs</span>
+  <a href="pcIQ_overview.html">Program Overview</a>
+  <a href="pcIQ_architecture.html" class="active">Technical Architecture</a>
+</div>
+
+<div id="canvas-wrap">
+<svg id="lines" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="m-blue"   markerWidth="7" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,7 3,0 6" fill="#3b82f6"/></marker>
+    <marker id="m-purple" markerWidth="7" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,7 3,0 6" fill="#8b5cf6"/></marker>
+    <marker id="m-green"  markerWidth="7" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,7 3,0 6" fill="#22c55e"/></marker>
+    <marker id="m-amber"  markerWidth="7" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,7 3,0 6" fill="#f59e0b"/></marker>
+    <marker id="m-slate"  markerWidth="7" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,7 3,0 6" fill="#64748b"/></marker>
+    <marker id="m-cyan"   markerWidth="7" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,7 3,0 6" fill="#06b6d4"/></marker>
+    <marker id="m-pink"   markerWidth="7" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,7 3,0 6" fill="#ec4899"/></marker>
+  </defs>
+</svg>
+
+<!-- ════ REGION BACKGROUNDS ════ -->
+<div class="region rg-fe"      style="left:18px;   top:106px; width:408px; height:1110px;"></div>
+<div class="region rg-backend" style="left:444px;  top:106px; width:1040px;height:1110px;"></div>
+<div class="region rg-api"     style="left:452px;  top:114px; width:215px; height:640px;"></div>
+<div class="region rg-core"    style="left:686px;  top:114px; width:215px; height:290px;"></div>
+<div class="region rg-models"  style="left:920px;  top:114px; width:215px; height:290px;"></div>
+<div class="region rg-db"      style="left:686px;  top:424px; width:215px; height:390px;"></div>
+<div class="region rg-signals" style="left:920px;  top:424px; width:215px; height:260px;"></div>
+<div class="region rg-ingest"  style="left:452px;  top:1136px;width:683px; height:640px;"></div>
+
+<!-- ════ SECTION LABELS ════ -->
+<div class="slabel sl-cicd"    style="left:25px;  top:28px;">CI / CD — GitHub Actions</div>
+<div class="slabel sl-fe"      style="left:25px;  top:115px;">Frontend — Next.js / Vercel</div>
+<div class="slabel sl-api"     style="left:460px; top:122px;">API Routes</div>
+<div class="slabel sl-core"    style="left:694px; top:122px;">Core</div>
+<div class="slabel sl-models"  style="left:928px; top:122px;">Models</div>
+<div class="slabel sl-db"      style="left:694px; top:432px;">DB Layer</div>
+<div class="slabel sl-signals" style="left:928px; top:432px;">Signals</div>
+<div class="slabel sl-ingest"  style="left:460px; top:1145px;">Ingestion Pipeline</div>
+<div class="slabel sl-ext"     style="left:1160px;top:115px;">External Services</div>
+
+<!-- ════ CI/CD ════ -->
+<div id="ci-daily"  class="card lyr-cicd" style="left:25px;  top:48px;">
+  <div class="fname">daily-ingest.yml</div>
+  <div class="fdesc">Triggers nightly EDGAR ingestion run</div>
+  <div class="ftag">cron · 12:00 UTC</div>
+</div>
+<div id="ci-feeder" class="card lyr-cicd" style="left:235px; top:48px;">
+  <div class="fname">weekly-feeder-scan.yml</div>
+  <div class="fdesc">Triggers feeder fund platform scan</div>
+  <div class="ftag">weekly</div>
+</div>
+<div id="ci-ria"    class="card lyr-cicd" style="left:445px; top:48px;">
+  <div class="fname">weekly-ria-enrich.yml</div>
+  <div class="fdesc">Triggers RIA AUM batch enrichment</div>
+  <div class="ftag">weekly</div>
+</div>
+
+<!-- ════ FRONTEND — PAGES ════ -->
+<div id="fe-layout"  class="card lyr-fe" style="left:25px;  top:148px;">
+  <div class="fname">layout.tsx</div>
+  <div class="fdesc">Root layout with Clerk auth provider</div>
+  <div class="ftag">page</div>
+</div>
+<div id="fe-page"    class="card lyr-fe" style="left:25px;  top:248px;">
+  <div class="fname">app/page.tsx</div>
+  <div class="fdesc">Homepage redirect to /signals</div>
+  <div class="ftag">page</div>
+</div>
+<div id="fe-signals" class="card lyr-fe" style="left:25px;  top:338px;">
+  <div class="fname">signals/page.tsx</div>
+  <div class="fdesc">Territory signal feed main view</div>
+  <div class="ftag">page</div>
+</div>
+<div id="fe-cion"    class="card lyr-fe" style="left:25px;  top:428px;">
+  <div class="fname">cion/page.tsx</div>
+  <div class="fdesc">Live CION registered fund NAV page</div>
+  <div class="ftag">page</div>
+</div>
+<div id="fe-signin"  class="card lyr-fe" style="left:25px;  top:518px;">
+  <div class="fname">sign-in/page.tsx</div>
+  <div class="fdesc">Clerk authentication sign-in page</div>
+  <div class="ftag">page</div>
+</div>
+
+<!-- ════ FRONTEND — COMPONENTS ════ -->
+<div id="fe-header"    class="card lyr-fe" style="left:25px;  top:638px;">
+  <div class="fname">AppHeader.tsx</div>
+  <div class="fdesc">App nav with Clerk user context</div>
+  <div class="ftag">component</div>
+</div>
+<div id="fe-sigtable"  class="card lyr-fe" style="left:25px;  top:730px;">
+  <div class="fname">SignalTable.tsx</div>
+  <div class="fdesc">Sortable signals feed table rows</div>
+  <div class="ftag">component</div>
+</div>
+<div id="fe-fundmodal" class="card lyr-fe" style="left:25px;  top:822px;">
+  <div class="fname">FundModal.tsx</div>
+  <div class="fdesc">Fund enrichment detail modal overlay</div>
+  <div class="ftag">component</div>
+</div>
+<div id="fe-cioncard"  class="card lyr-fe" style="left:25px;  top:914px;">
+  <div class="fname">CionFundCard.tsx</div>
+  <div class="fdesc">CION fund NAV and sparkline card</div>
+  <div class="ftag">component</div>
+</div>
+<div id="fe-tabs"      class="card lyr-fe" style="left:228px; top:638px;">
+  <div class="fname">TerritoryTabs.tsx</div>
+  <div class="fdesc">Geographic territory selector tabs</div>
+  <div class="ftag">component</div>
+</div>
+<div id="fe-panel"     class="card lyr-fe" style="left:228px; top:730px;">
+  <div class="fname">PlatformPanel.tsx</div>
+  <div class="fdesc">Platform activity count sidebar</div>
+  <div class="ftag">component</div>
+</div>
+<div id="fe-spark"     class="card lyr-fe" style="left:228px; top:822px;">
+  <div class="fname">Sparkline.tsx</div>
+  <div class="fdesc">SVG mini line chart for NAV history</div>
+  <div class="ftag">component</div>
+</div>
+
+<!-- ════ FRONTEND — LIB ════ -->
+<div id="fe-api"   class="card lyr-fe" style="left:25px;  top:1038px;">
+  <div class="fname">lib/api.ts</div>
+  <div class="fdesc">HTTP client for backend API calls</div>
+  <div class="ftag">lib</div>
+</div>
+<div id="fe-types" class="card lyr-fe" style="left:228px; top:1038px;">
+  <div class="fname">lib/types.ts</div>
+  <div class="fdesc">TypeScript interface definitions</div>
+  <div class="ftag">lib</div>
+</div>
+
+<!-- ════ API ROUTES ════ -->
+<div id="api-signals"   class="card lyr-api" style="left:460px; top:148px;">
+  <div class="fname">api/signals.py</div>
+  <div class="fdesc">Territory signal reports from DB</div>
+  <div class="ftag">GET /api/signals</div>
+</div>
+<div id="api-cion"      class="card lyr-api" style="left:460px; top:258px;">
+  <div class="fname">api/cion.py</div>
+  <div class="fdesc">Live CION NAV via Yahoo Finance</div>
+  <div class="ftag">GET /api/cion/funds</div>
+</div>
+<div id="api-fund"      class="card lyr-api" style="left:460px; top:368px;">
+  <div class="fname">api/fund.py</div>
+  <div class="fdesc">Enriched fund detail from four sources</div>
+  <div class="ftag">GET /api/fund/{cik}</div>
+</div>
+<div id="api-ingest"    class="card lyr-api" style="left:460px; top:478px;">
+  <div class="fname">api/ingest.py</div>
+  <div class="fdesc">Token-protected ingestion trigger</div>
+  <div class="ftag">POST 🔐</div>
+</div>
+<div id="api-rias"      class="card lyr-api" style="left:460px; top:578px;">
+  <div class="fname">api/rias.py</div>
+  <div class="fdesc">RIA AUM enrichment from IAPD + ADV</div>
+  <div class="ftag">POST 🔐</div>
+</div>
+<div id="api-platforms" class="card lyr-api" style="left:460px; top:668px;">
+  <div class="fname">api/platforms.py</div>
+  <div class="fdesc">Platform roster and feeder ingestion</div>
+  <div class="ftag">POST 🔐</div>
+</div>
+
+<!-- ════ CORE ════ -->
+<div id="be-main"   class="card lyr-core" style="left:694px; top:148px;">
+  <div class="fname">main.py</div>
+  <div class="fdesc">FastAPI app with CORS, mounts all routers</div>
+  <div class="ftag">entry point</div>
+</div>
+<div id="be-config" class="card lyr-core" style="left:694px; top:258px;">
+  <div class="fname">config.py</div>
+  <div class="fdesc">Pydantic settings from environment vars</div>
+  <div class="ftag">config</div>
+</div>
+
+<!-- ════ MODELS ════ -->
+<div id="mod-formd" class="card lyr-model" style="left:928px; top:148px;">
+  <div class="fname">models/form_d.py</div>
+  <div class="fdesc">Pydantic Form D filing schema + flags</div>
+  <div class="ftag">model</div>
+</div>
+<div id="mod-ria"   class="card lyr-model" style="left:928px; top:258px;">
+  <div class="fname">models/ria.py</div>
+  <div class="fdesc">Pydantic RIA firm profile schema</div>
+  <div class="ftag">model</div>
+</div>
+
+<!-- ════ DB LAYER ════ -->
+<div id="db-client" class="card lyr-db" style="left:694px; top:458px;">
+  <div class="fname">db/client.py</div>
+  <div class="fdesc">Lazy Supabase client singleton</div>
+  <div class="ftag">db</div>
+</div>
+<div id="db-reader" class="card lyr-db" style="left:694px; top:558px;">
+  <div class="fname">db/reader.py</div>
+  <div class="fdesc">Read-only queries for signals and RIA matching</div>
+  <div class="ftag">db · read</div>
+</div>
+<div id="db-writer" class="card lyr-db" style="left:694px; top:668px;">
+  <div class="fname">db/writer.py</div>
+  <div class="fdesc">Upserts filings and RIA profiles</div>
+  <div class="ftag">db · write</div>
+</div>
+<div id="db-cache"  class="card lyr-db" style="left:694px; top:768px;">
+  <div class="fname">db/adv_cache.py</div>
+  <div class="fdesc">Cache ADV parsed data, avoid re-fetch</div>
+  <div class="ftag">db · cache</div>
+</div>
+
+<!-- ════ SIGNALS ════ -->
+<div id="sig-scoring" class="card lyr-signals" style="left:928px; top:458px;">
+  <div class="fname">signals/scoring.py</div>
+  <div class="fdesc">Priority scoring engine, 0–10 points</div>
+  <div class="ftag">signals</div>
+</div>
+<div id="sig-run"     class="card lyr-signals" style="left:928px; top:568px;">
+  <div class="fname">signals/run_signals.py</div>
+  <div class="fdesc">Territory definitions and state mappings</div>
+  <div class="ftag">signals · config</div>
+</div>
+
+<!-- ════ INGESTION — LEFT COLUMN (runners + clients) ════ -->
+<div id="ing-run"     class="card lyr-ingest" style="left:460px; top:1168px;">
+  <div class="fname">ingestion/run.py</div>
+  <div class="fdesc">Daily EDGAR ingestion orchestrator</div>
+  <div class="ftag">runner</div>
+</div>
+<div id="ing-feeder"  class="card lyr-ingest" style="left:460px; top:1278px;">
+  <div class="fname">ingestion/run_feeder.py</div>
+  <div class="fdesc">Feeder fund EDGAR search and ingest</div>
+  <div class="ftag">runner</div>
+</div>
+<div id="ing-adv-run" class="card lyr-ingest" style="left:460px; top:1388px;">
+  <div class="fname">ingestion/run_adv.py</div>
+  <div class="fdesc">Bulk ADV PDF enrichment runner</div>
+  <div class="ftag">runner</div>
+</div>
+<div id="ing-edgar"   class="card lyr-ingest" style="left:460px; top:1498px;">
+  <div class="fname">ingestion/edgar_client.py</div>
+  <div class="fdesc">SEC EDGAR full-text search API client</div>
+  <div class="ftag">client</div>
+</div>
+<div id="ing-parser"  class="card lyr-ingest" style="left:460px; top:1608px;">
+  <div class="fname">ingestion/form_d_parser.py</div>
+  <div class="fdesc">XML to FormDFiling Pydantic converter</div>
+  <div class="ftag">parser</div>
+</div>
+
+<!-- ════ INGESTION — RIGHT COLUMN (parsers + resolvers) ════ -->
+<div id="ing-adv"       class="card lyr-ingest" style="left:694px; top:1168px;">
+  <div class="fname">ingestion/adv_pdf_parser.py</div>
+  <div class="fdesc">Downloads and parses SEC ADV PDFs</div>
+  <div class="ftag">parser</div>
+</div>
+<div id="ing-entity"    class="card lyr-ingest" style="left:694px; top:1278px;">
+  <div class="fname">ingestion/entity_resolver.py</div>
+  <div class="fdesc">Fund name dedup and canonicalization</div>
+  <div class="ftag">resolver</div>
+</div>
+<div id="ing-advclient" class="card lyr-ingest" style="left:694px; top:1388px;">
+  <div class="fname">ingestion/adv_client.py</div>
+  <div class="fdesc">IAPD adviser detail API client</div>
+  <div class="ftag">client</div>
+</div>
+<div id="ing-advparser" class="card lyr-ingest" style="left:694px; top:1498px;">
+  <div class="fname">ingestion/adv_parser.py</div>
+  <div class="fdesc">Parses IAPD firm response to RIA model</div>
+  <div class="ftag">parser</div>
+</div>
+<div id="ing-plat"      class="card lyr-ingest" style="left:694px; top:1608px;">
+  <div class="fname">ingestion/platform_scraper.py</div>
+  <div class="fdesc">Scrapes CAIS RIA platform roster</div>
+  <div class="ftag">scraper</div>
+</div>
+
+<!-- ════ EXTERNAL SERVICES ════ -->
+<div id="ext-supabase" class="card lyr-ext" style="left:1160px; top:148px; width:230px;">
+  <div class="fname">🗄️ Supabase (PostgreSQL)</div>
+  <div class="fdesc">form_d_filings · entities · rias<br>fund_platforms · ria_platforms · adv_cache</div>
+  <div class="ftag">database</div>
+</div>
+<div id="ext-edgar"    class="card lyr-ext" style="left:1160px; top:310px; width:230px;">
+  <div class="fname">🏛️ SEC EDGAR</div>
+  <div class="fdesc">Form D filing search and XML fetch</div>
+  <div class="ftag">efts.sec.gov</div>
+</div>
+<div id="ext-iapd"     class="card lyr-ext" style="left:1160px; top:430px; width:230px;">
+  <div class="fname">🔍 IAPD Adviser Search</div>
+  <div class="fdesc">Investment adviser firm lookup by name</div>
+  <div class="ftag">adviserinfo.sec.gov</div>
+</div>
+<div id="ext-advpdf"   class="card lyr-ext" style="left:1160px; top:548px; width:230px;">
+  <div class="fname">📄 ADV PDF Reports</div>
+  <div class="fdesc">Form ADV Part 1A: AUM, clients, structure</div>
+  <div class="ftag">reports.adviserinfo.sec.gov</div>
+</div>
+<div id="ext-yahoo"    class="card lyr-ext" style="left:1160px; top:668px; width:230px;">
+  <div class="fname">📈 Yahoo Finance</div>
+  <div class="fdesc">Live NAV prices and 90-day price history</div>
+  <div class="ftag">yfinance</div>
+</div>
+<div id="ext-cais"     class="card lyr-ext" style="left:1160px; top:788px; width:230px;">
+  <div class="fname">🏢 CAIS Directory</div>
+  <div class="fdesc">RIA platform membership roster scrape</div>
+  <div class="ftag">web scrape</div>
+</div>
+<div id="ext-clerk"    class="card lyr-ext" style="left:1160px; top:908px; width:230px;">
+  <div class="fname">🔐 Clerk Auth</div>
+  <div class="fdesc">User authentication and session management</div>
+  <div class="ftag">clerk.com</div>
+</div>
+<div id="ext-railway"  class="card lyr-ext" style="left:1160px; top:1028px; width:230px;">
+  <div class="fname">🚂 Railway</div>
+  <div class="fdesc">Backend FastAPI deployment host</div>
+  <div class="ftag">railway.toml</div>
+</div>
+<div id="ext-vercel"   class="card lyr-ext" style="left:1160px; top:1148px; width:230px;">
+  <div class="fname">▲ Vercel</div>
+  <div class="fdesc">Next.js frontend deployment host</div>
+  <div class="ftag">vercel.json</div>
+</div>
+
+<!-- ════ LEGEND ════ -->
+<div id="legend">
+  <div class="leg-title">Layers</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#1e3a8a"></div>Frontend</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#6d28d9"></div>API Routes</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#065f46"></div>Core / Config</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#86198f"></div>Models</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#0e7490"></div>Signals</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#166534"></div>DB Layer</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#b45309"></div>Ingestion</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#334155"></div>External Service</div>
+  <hr class="leg-hr">
+  <div class="leg-title">Connections</div>
+  <div class="leg-line">
+    <svg width="32" height="10"><path d="M0,5 L24,5" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#m-blue)" fill="none"/></svg>
+    API call
+  </div>
+  <div class="leg-line">
+    <svg width="32" height="10"><path d="M0,5 L24,5" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="4,2" marker-end="url(#m-green)" fill="none"/></svg>
+    DB read / write
+  </div>
+  <div class="leg-line">
+    <svg width="32" height="10"><path d="M0,5 L24,5" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#m-amber)" fill="none"/></svg>
+    External call
+  </div>
+  <div class="leg-line">
+    <svg width="32" height="10"><path d="M0,5 L24,5" stroke="#64748b" stroke-width="1.5" stroke-dasharray="4,2" marker-end="url(#m-slate)" fill="none"/></svg>
+    Internal ref
+  </div>
+  <hr class="leg-hr">
+  <div style="font-size:9px; color:#475569;">Hover a card to spotlight connections</div>
+</div>
+</div><!-- /canvas-wrap -->
+
+<script>
+const BLUE='#3b82f6', GREEN='#22c55e', AMBER='#f59e0b',
+      PURPLE='#8b5cf6', SLATE='#64748b', CYAN='#06b6d4', PINK='#ec4899';
+
+// ── Connection manifest ──────────────────────────────────────────────────────
+// [fromId, toId, color, dashed]
+const MANIFEST = [
+  // Frontend api.ts → routes
+  ['fe-api','api-signals', BLUE,   false],
+  ['fe-api','api-cion',    BLUE,   false],
+  ['fe-api','api-fund',    BLUE,   false],
+
+  // Frontend page/component internal refs
+  ['fe-signals', 'fe-sigtable',  SLATE, true],
+  ['fe-signals', 'fe-fundmodal', SLATE, true],
+  ['fe-signals', 'fe-tabs',      SLATE, true],
+  ['fe-signals', 'fe-panel',     SLATE, true],
+  ['fe-cion',    'fe-cioncard',  SLATE, true],
+  ['fe-cion',    'fe-spark',     SLATE, true],
+  ['fe-fundmodal','fe-api',      SLATE, true],
+  ['fe-signals', 'fe-api',       SLATE, true],
+  ['fe-cion',    'fe-api',       SLATE, true],
+
+  // Auth
+  ['fe-layout','ext-clerk', SLATE, true],
+
+  // API → Core
+  ['api-signals','be-main',   PURPLE, true],
+  ['api-cion',   'be-main',   PURPLE, true],
+
+  // API signals → DB + scoring
+  ['api-signals', 'db-reader',   GREEN, true],
+  ['api-signals', 'sig-scoring', CYAN,  false],
+
+  // API cion → Yahoo
+  ['api-cion', 'ext-yahoo', AMBER, false],
+
+  // API fund → DB
+  ['api-fund', 'db-reader', GREEN, true],
+  ['api-fund', 'db-cache',  GREEN, true],
+
+  // API fund → ingestion parsers
+  ['api-fund', 'ing-edgar',  AMBER, false],
+  ['api-fund', 'ing-parser', AMBER, false],
+  ['api-fund', 'ing-adv',    AMBER, false],
+
+  // API fund → IAPD direct
+  ['api-fund', 'ext-iapd', AMBER, false],
+
+  // API ingest → runners
+  ['api-ingest',    'ing-run',    PURPLE, false],
+  ['api-platforms', 'ing-feeder', PURPLE, false],
+  ['api-platforms', 'ing-plat',   PURPLE, false],
+
+  // API rias → ingestion + DB
+  ['api-rias', 'ing-advclient', PURPLE, false],
+  ['api-rias', 'ing-adv',       PURPLE, false],
+  ['api-rias', 'db-reader',     GREEN,  true],
+  ['api-rias', 'db-writer',     GREEN,  true],
+
+  // DB → Supabase
+  ['db-client', 'ext-supabase', GREEN, false],
+  ['db-reader', 'ext-supabase', GREEN, true],
+  ['db-writer', 'ext-supabase', GREEN, true],
+  ['db-cache',  'ext-supabase', GREEN, true],
+
+  // Ingestion run → sub-components
+  ['ing-run', 'ing-edgar',  AMBER, false],
+  ['ing-run', 'ing-parser', AMBER, false],
+  ['ing-run', 'ing-entity', AMBER, false],
+  ['ing-run', 'db-writer',  GREEN, true],
+
+  // Ingestion → External
+  ['ing-edgar',     'ext-edgar',  AMBER, false],
+  ['ing-adv',       'ext-advpdf', AMBER, false],
+  ['ing-plat',      'ext-cais',   AMBER, false],
+  ['ing-advclient', 'ext-iapd',   AMBER, false],
+
+  // Models used by parsers
+  ['ing-parser',    'mod-formd', PINK, true],
+  ['ing-advparser', 'mod-ria',   PINK, true],
+
+  // Signals
+  ['sig-scoring', 'sig-run', CYAN, true],
+
+  // CI/CD → API
+  ['ci-daily',  'api-ingest',    SLATE, false],
+  ['ci-feeder', 'api-platforms', SLATE, false],
+  ['ci-ria',    'api-rias',      SLATE, false],
+
+  // Deployment
+  ['be-main', 'ext-railway', SLATE, true],
+];
+
+// ── Geometry helpers ─────────────────────────────────────────────────────────
+const svgEl = document.getElementById('lines');
+const wrap  = document.getElementById('canvas-wrap');
+
+function box(id) {
+  const el = document.getElementById(id);
+  if (!el) return null;
+  const wr = wrap.getBoundingClientRect();
+  const er = el.getBoundingClientRect();
+  const x = er.left - wr.left, y = er.top - wr.top;
+  return { x, y, w: er.width, h: er.height,
+    cx: x + er.width/2, cy: y + er.height/2,
+    r: x + er.width, b: y + er.height };
+}
+
+function makePath(d, color, dashed, marker) {
+  const p = document.createElementNS('http://www.w3.org/2000/svg','path');
+  p.setAttribute('d', d);
+  p.setAttribute('stroke', color);
+  p.setAttribute('stroke-width', '1.5');
+  p.setAttribute('fill', 'none');
+  if (dashed) p.setAttribute('stroke-dasharray', '5,3');
+  const mk = color===BLUE?'blue':color===GREEN?'green':color===AMBER?'amber':
+             color===PURPLE?'purple':color===CYAN?'cyan':color===PINK?'pink':'slate';
+  p.setAttribute('marker-end', `url(#m-${mk})`);
+  return p;
+}
+
+function connect(fa, fb, color, dashed) {
+  if (!fa || !fb) return null;
+  // Choose exit/entry sides: prefer right→left when horizontally separated
+  // prefer bottom→top when vertically separated on same column
+  const dx = fb.cx - fa.cx, dy = fb.cy - fa.cy;
+  let x1,y1,x2,y2,cx1,cy1,cx2,cy2;
+
+  if (Math.abs(dx) > Math.abs(dy)*0.8) {
+    // Mostly horizontal
+    if (dx > 0) { x1=fa.r; y1=fa.cy; x2=fb.x; y2=fb.cy; }
+    else         { x1=fa.x; y1=fa.cy; x2=fb.r; y2=fb.cy; }
+    const pull = Math.min(Math.abs(dx)*0.4, 120);
+    cx1 = x1 + (dx>0 ? pull : -pull);
+    cy1 = y1;
+    cx2 = x2 + (dx>0 ? -pull : pull);
+    cy2 = y2;
+  } else {
+    // Mostly vertical
+    if (dy > 0) { x1=fa.cx; y1=fa.b;  x2=fb.cx; y2=fb.y; }
+    else         { x1=fa.cx; y1=fa.y;  x2=fb.cx; y2=fb.b; }
+    const pull = Math.min(Math.abs(dy)*0.4, 80);
+    cx1 = x1; cy1 = y1 + (dy>0 ? pull : -pull);
+    cx2 = x2; cy2 = y2 + (dy>0 ? -pull : pull);
+  }
+  const d = `M${x1},${y1} C${cx1},${cy1} ${cx2},${cy2} ${x2},${y2}`;
+  return makePath(d, color, dashed);
+}
+
+// ── Build graph + draw ───────────────────────────────────────────────────────
+const pathMeta = [];   // {el, from, to}
+const adjMap   = {};   // id → Set<id>
+
+function ensureAdj(id) { if (!adjMap[id]) adjMap[id] = new Set(); }
+
+window.addEventListener('load', () => {
+  MANIFEST.forEach(([from, to, color, dashed]) => {
+    const fa = box(from), fb = box(to);
+    const el = connect(fa, fb, color, dashed);
+    if (!el) return;
+    svgEl.appendChild(el);
+    pathMeta.push({el, from, to});
+    ensureAdj(from); ensureAdj(to);
+    adjMap[from].add(to);
+    adjMap[to].add(from);
+  });
+
+  setupHover();
+});
+
+// ── Click-to-lock spotlight ───────────────────────────────────────────────────
+// Click a card  → locks spotlight on it (stays while you scroll)
+// Click same card again, or click empty canvas → releases
+let lockedId = null;
+
+function applySpotlight(id) {
+  const cards = document.querySelectorAll('.card');
+  const neighbors = adjMap[id] || new Set();
+
+  cards.forEach(c => {
+    c.classList.remove('focused','neighbor','dimmed');
+    c.classList.add('dimmed');
+  });
+  pathMeta.forEach(({el}) => {
+    el.classList.remove('path-lit','path-dim');
+    el.classList.add('path-dim');
+  });
+
+  const focused = document.getElementById(id);
+  if (focused) { focused.classList.remove('dimmed'); focused.classList.add('focused'); }
+
+  neighbors.forEach(nid => {
+    const nel = document.getElementById(nid);
+    if (nel) { nel.classList.remove('dimmed'); nel.classList.add('neighbor'); }
+  });
+
+  pathMeta.forEach(({el, from, to}) => {
+    if (from === id || to === id) {
+      el.classList.remove('path-dim');
+      el.classList.add('path-lit');
+    }
+  });
+}
+
+function clearSpotlight() {
+  document.querySelectorAll('.card').forEach(c =>
+    c.classList.remove('dimmed','focused','neighbor'));
+  pathMeta.forEach(({el}) => el.classList.remove('path-dim','path-lit'));
+  lockedId = null;
+}
+
+function setupHover() {
+  const cards = document.querySelectorAll('.card');
+
+  cards.forEach(card => {
+    // Click: toggle lock
+    card.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (lockedId === card.id) {
+        clearSpotlight();
+      } else {
+        lockedId = card.id;
+        applySpotlight(lockedId);
+      }
+    });
+
+    // Hover preview only when nothing is locked
+    card.addEventListener('mouseenter', () => {
+      if (lockedId) return;
+      applySpotlight(card.id);
+    });
+    card.addEventListener('mouseleave', () => {
+      if (lockedId) return;
+      clearSpotlight();
+    });
+  });
+
+  // Click on empty canvas → release lock
+  document.getElementById('canvas-wrap').addEventListener('click', () => {
+    if (lockedId) clearSpotlight();
+  });
+}
+</script>
+</body>
+</html>

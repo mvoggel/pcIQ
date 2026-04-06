@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>pcIQ — Program Overview</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0c0f18;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  color: #e2e8f0;
+  overflow: auto;
+}
+
+/* ── NAV ── */
+#topnav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #1e293b;
+}
+#topnav .nav-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; color: #475569; margin-right: 10px;
+}
+#topnav a {
+  text-decoration: none; font-size: 11.5px; font-weight: 600;
+  padding: 5px 16px; border-radius: 5px; border: 1px solid #334155;
+  color: #64748b; transition: all 0.15s;
+}
+#topnav a:hover { border-color: #64748b; color: #cbd5e1; }
+#topnav a.active { background: #1e293b; border-color: #475569; color: #e2e8f0; }
+
+/* ── CANVAS ── */
+#canvas-wrap {
+  position: relative;
+  width: 1620px;
+  height: 960px;
+  margin: 0 auto;
+}
+svg#lines {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none; z-index: 2;
+}
+
+/* ── CARDS ── */
+.card {
+  position: absolute;
+  border-radius: 9px;
+  padding: 12px 15px;
+  z-index: 10;
+  width: 210px;
+  border: 1.5px solid transparent;
+  cursor: default;
+  transition: opacity 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+.card .cname {
+  font-weight: 700; font-size: 13px; line-height: 1.25; margin-bottom: 6px;
+}
+.card .cdesc {
+  font-size: 10.5px; opacity: 0.68; line-height: 1.4;
+}
+.card .ctag {
+  display: inline-block; margin-top: 8px; font-size: 9px; font-weight: 800;
+  letter-spacing: 0.06em; padding: 2px 7px; border-radius: 3px;
+  text-transform: uppercase;
+}
+
+/* wide card variant for DB */
+.card.wide { width: 210px; }
+
+/* spotlight states */
+.card.dimmed   { opacity: 0.12 !important; transform: none !important; }
+.card.neighbor { opacity: 0.82 !important; }
+.card.focused  {
+  opacity: 1 !important; transform: translateY(-2px);
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.22), 0 10px 32px rgba(0,0,0,0.7) !important;
+}
+svg path.path-dim { opacity: 0.06 !important; }
+svg path.path-lit { opacity: 1 !important; stroke-width: 2.5 !important; }
+
+/* ── REGION BACKGROUNDS ── */
+.region {
+  position: absolute; border-radius: 12px; z-index: 1; border: 1px solid;
+}
+.rg-product  { background: rgba(30,64,175,0.06); border-color: rgba(30,64,175,0.2); }
+.rg-intel    { background: rgba(109,40,217,0.06); border-color: rgba(109,40,217,0.2); }
+.rg-data     { background: rgba(22,101,52,0.06); border-color: rgba(22,101,52,0.2); }
+.rg-pipeline { background: rgba(180,83,9,0.06); border-color: rgba(180,83,9,0.2); }
+.rg-sources  { background: rgba(51,65,85,0.08); border-color: rgba(51,65,85,0.3); }
+.rg-infra    { background: rgba(15,23,42,0.5); border-color: rgba(30,41,59,0.6); }
+
+/* ── SECTION LABELS ── */
+.slabel {
+  position: absolute; font-size: 9.5px; font-weight: 800;
+  letter-spacing: 0.12em; text-transform: uppercase; z-index: 12;
+  padding: 3px 10px; border-radius: 4px;
+}
+.sl-cicd     { color:#fbbf24; background:#18120a; border:1px solid #78350f; }
+.sl-product  { color:#60a5fa; background:#030c1e; border:1px solid #1e40af; }
+.sl-intel    { color:#a78bfa; background:#0a0416; border:1px solid #5b21b6; }
+.sl-data     { color:#34d399; background:#021008; border:1px solid #065f46; }
+.sl-pipeline { color:#fcd34d; background:#120900; border:1px solid #92400e; }
+.sl-sources  { color:#94a3b8; background:#0a0e18; border:1px solid #334155; }
+.sl-infra    { color:#64748b; background:#0a0c14; border:1px solid #1e293b; }
+
+/* ── LAYER PALETTES ── */
+.lyr-cicd   { background:#18120a; border-color:#78350f; color:#fde68a; }
+.lyr-cicd   .ctag { background:#26190b; color:#fbbf24; }
+
+.lyr-product { background:#03091f; border-color:#1d4ed8; color:#bfdbfe; }
+.lyr-product .ctag { background:#060f2e; color:#60a5fa; }
+
+.lyr-intel  { background:#0a0320; border-color:#6d28d9; color:#ddd6fe; }
+.lyr-intel  .ctag { background:#140638; color:#a78bfa; }
+
+.lyr-db     { background:#021208; border-color:#15803d; color:#bbf7d0; }
+.lyr-db     .ctag { background:#052e16; color:#34d399; }
+
+.lyr-pipeline { background:#160900; border-color:#b45309; color:#fde68a; }
+.lyr-pipeline .ctag { background:#280e00; color:#fcd34d; }
+
+.lyr-source { background:#0c1018; border-color:#334155; color:#cbd5e1; }
+.lyr-source .ctag { background:#0a0e18; color:#94a3b8; }
+
+.lyr-infra  { background:#090b12; border-color:#1e293b; color:#94a3b8; }
+.lyr-infra  .ctag { background:#050710; color:#64748b; }
+
+/* ── LEGEND ── */
+#legend {
+  position: fixed; bottom: 16px; right: 16px;
+  background: #0c0f18; border: 1px solid #1e293b;
+  border-radius: 8px; padding: 12px 15px;
+  font-size: 10.5px; z-index: 200; min-width: 170px;
+}
+.leg-title { font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px; font-size:9px; }
+.leg-row   { display:flex; align-items:center; gap:8px; margin-bottom:5px; color:#94a3b8; }
+.leg-dot   { width:10px; height:10px; border-radius:2px; flex-shrink:0; }
+.leg-hr    { border:none; border-top:1px solid #1e293b; margin:8px 0; }
+.leg-line  { display:flex; align-items:center; gap:8px; margin-bottom:5px; color:#94a3b8; }
+.leg-hint  { font-size:9px; color:#475569; margin-top:4px; }
+</style>
+</head>
+<body>
+
+<div id="topnav">
+  <span class="nav-label">pcIQ Docs</span>
+  <a href="pcIQ_overview.html" class="active">Program Overview</a>
+  <a href="pcIQ_architecture.html">Technical Architecture</a>
+</div>
+
+<div id="canvas-wrap">
+<svg id="lines" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="m-blue"   markerWidth="7" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,7 3,0 6" fill="#3b82f6"/></marker>
+    <marker id="m-purple" markerWidth="7" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,7 3,0 6" fill="#8b5cf6"/></marker>
+    <marker id="m-green"  markerWidth="7" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,7 3,0 6" fill="#22c55e"/></marker>
+    <marker id="m-amber"  markerWidth="7" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,7 3,0 6" fill="#f59e0b"/></marker>
+    <marker id="m-slate"  markerWidth="7" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,7 3,0 6" fill="#64748b"/></marker>
+  </defs>
+</svg>
+
+<!-- ═══ REGION BACKGROUNDS ═══ -->
+<div class="region rg-product"  style="left:18px;   top:105px; width:230px; height:660px;"></div>
+<div class="region rg-intel"    style="left:268px;  top:105px; width:230px; height:660px;"></div>
+<div class="region rg-data"     style="left:518px;  top:105px; width:230px; height:430px;"></div>
+<div class="region rg-pipeline" style="left:768px;  top:105px; width:230px; height:660px;"></div>
+<div class="region rg-sources"  style="left:1018px; top:105px; width:230px; height:770px;"></div>
+<div class="region rg-infra"    style="left:1268px; top:105px; width:330px; height:660px;"></div>
+
+<!-- ═══ SECTION LABELS ═══ -->
+<div class="slabel sl-cicd"    style="left:25px;   top:28px;">Automated Triggers</div>
+<div class="slabel sl-product" style="left:25px;   top:113px;">What Users See</div>
+<div class="slabel sl-intel"   style="left:275px;  top:113px;">How It's Processed</div>
+<div class="slabel sl-data"    style="left:525px;  top:113px;">Central Database</div>
+<div class="slabel sl-pipeline"style="left:775px;  top:113px;">Data Collection</div>
+<div class="slabel sl-sources" style="left:1025px; top:113px;">External Data Sources</div>
+<div class="slabel sl-infra"   style="left:1275px; top:113px;">Infrastructure</div>
+
+<!-- ═══ CI/CD ROW ═══ -->
+<div id="ci-daily"   class="card lyr-cicd" style="left:25px;  top:42px;">
+  <div class="cname">🌙 Nightly Filing Trigger</div>
+  <div class="cdesc">Runs every night at 8 AM ET to kick off the SEC data pull</div>
+  <div class="ctag">Daily · GitHub Actions</div>
+</div>
+<div id="ci-adviser" class="card lyr-cicd" style="left:275px; top:42px;">
+  <div class="cname">👤 Weekly Adviser Refresh</div>
+  <div class="cdesc">Updates AUM, firm size, and client data for all tracked RIAs</div>
+  <div class="ctag">Weekly · GitHub Actions</div>
+</div>
+<div id="ci-platform" class="card lyr-cicd" style="left:525px; top:42px;">
+  <div class="cname">🔗 Weekly Platform Sync</div>
+  <div class="cdesc">Refreshes which RIA firms are registered on each alt platform</div>
+  <div class="ctag">Weekly · GitHub Actions</div>
+</div>
+
+<!-- ═══ PRODUCT COLUMN ═══ -->
+<div id="p-feed" class="card lyr-product" style="left:25px; top:148px;">
+  <div class="cname">📡 Territory Signal Feed</div>
+  <div class="cdesc">Ranked list of active private fund raises, filtered by territory, platform, and recency</div>
+  <div class="ctag">Main view</div>
+</div>
+<div id="p-modal" class="card lyr-product" style="left:25px; top:295px;">
+  <div class="cname">🪟 Fund Intelligence Modal</div>
+  <div class="cdesc">Click any signal for a deep dive: manager background, raise progress, confirmed and likely RIA allocators</div>
+  <div class="ctag">On-click detail</div>
+</div>
+<div id="p-cion" class="card lyr-product" style="left:25px; top:455px;">
+  <div class="cname">📊 CION Live Tracker</div>
+  <div class="cdesc">Real-time NAV, daily change, 52-week range, and 90-day sparkline for CION's registered fund lineup</div>
+  <div class="ctag">Live prices</div>
+</div>
+<div id="p-auth" class="card lyr-product" style="left:25px; top:600px;">
+  <div class="cname">🔐 User Authentication</div>
+  <div class="cdesc">Secure sign-in and role-based access control for all pcIQ users</div>
+  <div class="ctag">Clerk Auth</div>
+</div>
+
+<!-- ═══ INTELLIGENCE COLUMN ═══ -->
+<div id="i-scorer" class="card lyr-intel" style="left:275px; top:148px;">
+  <div class="cname">🎯 Signal Scoring Engine</div>
+  <div class="cdesc">Assigns each fund a 0–10 priority score based on platform presence, territory overlap, offering size, and filing recency</div>
+  <div class="ctag">Core algorithm</div>
+</div>
+<div id="i-territory" class="card lyr-intel" style="left:275px; top:310px;">
+  <div class="cname">📍 Territory Engine</div>
+  <div class="cdesc">Maps every fund raise to 5 US territories (NE, SE, Midwest, SW, West) by solicitation states and RIA geography</div>
+  <div class="ctag">5 territories</div>
+</div>
+<div id="i-enricher" class="card lyr-intel" style="left:275px; top:455px;">
+  <div class="cname">🔬 Fund Enrichment Engine</div>
+  <div class="cdesc">On-demand: stitches together EDGAR filings, IAPD profiles, and ADV data to power the fund detail modal</div>
+  <div class="ctag">Real-time · on-demand</div>
+</div>
+<div id="i-gateway" class="card lyr-intel" style="left:275px; top:620px;">
+  <div class="cname">🛡️ Secure API Gateway</div>
+  <div class="cdesc">Token-protected endpoints that receive automated triggers and launch background data pipelines</div>
+  <div class="ctag">Bearer token auth</div>
+</div>
+
+<!-- ═══ DATABASE ═══ -->
+<div id="db-main" class="card lyr-db" style="left:525px; top:148px; width:210px; height:370px; display:flex; flex-direction:column; justify-content:flex-start;">
+  <div class="cname">🗄️ Supabase Database</div>
+  <div class="cdesc" style="margin-bottom:12px;">Single source of truth — all pcIQ data lives here, powering every view and score</div>
+  <div style="display:flex; flex-direction:column; gap:7px; margin-top:4px;">
+    <div style="background:rgba(0,0,0,0.3); border:1px solid rgba(52,211,153,0.15); border-radius:5px; padding:6px 9px; font-size:10px; color:#6ee7b7;">
+      <span style="font-weight:700;">📄 Form D Filings</span><br>
+      <span style="opacity:0.6;">Every SEC filing we've ingested</span>
+    </div>
+    <div style="background:rgba(0,0,0,0.3); border:1px solid rgba(52,211,153,0.15); border-radius:5px; padding:6px 9px; font-size:10px; color:#6ee7b7;">
+      <span style="font-weight:700;">🏷️ Entity Registry</span><br>
+      <span style="opacity:0.6;">Deduplicated fund sponsor names</span>
+    </div>
+    <div style="background:rgba(0,0,0,0.3); border:1px solid rgba(52,211,153,0.15); border-radius:5px; padding:6px 9px; font-size:10px; color:#6ee7b7;">
+      <span style="font-weight:700;">👤 RIA Profiles</span><br>
+      <span style="opacity:0.6;">Adviser firms with AUM + client data</span>
+    </div>
+    <div style="background:rgba(0,0,0,0.3); border:1px solid rgba(52,211,153,0.15); border-radius:5px; padding:6px 9px; font-size:10px; color:#6ee7b7;">
+      <span style="font-weight:700;">🔗 Platform Memberships</span><br>
+      <span style="opacity:0.6;">RIA ↔ platform relationships</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PIPELINE COLUMN ═══ -->
+<div id="pl-filing" class="card lyr-pipeline" style="left:775px; top:148px;">
+  <div class="cname">📥 Filing Collector</div>
+  <div class="cdesc">Searches SEC nightly, downloads and parses Form D XML, filters to private credit candidates, deduplicates sponsors</div>
+  <div class="ctag">~200 filings/night</div>
+</div>
+<div id="pl-adviser" class="card lyr-pipeline" style="left:775px; top:295px;">
+  <div class="cname">🔍 Adviser Enrichment</div>
+  <div class="cdesc">Matches fund managers to IAPD profiles, then pulls AUM, client counts, and firm structure from ADV PDF reports</div>
+  <div class="ctag">Weekly batch</div>
+</div>
+<div id="pl-platform" class="card lyr-pipeline" style="left:775px; top:445px;">
+  <div class="cname">🗺️ Platform Mapper</div>
+  <div class="cdesc">Identifies which RIA firms are registered on iCapital, CAIS, Altigo, Moonfare via scrapes, filings, and CSV imports</div>
+  <div class="ctag">3 sources</div>
+</div>
+<div id="pl-dedup" class="card lyr-pipeline" style="left:775px; top:590px;">
+  <div class="cname">🧹 Entity Deduplication</div>
+  <div class="cdesc">Canonicalizes fund sponsor names so the same manager appearing across multiple filings maps to one entity</div>
+  <div class="ctag">In-memory matching</div>
+</div>
+
+<!-- ═══ EXTERNAL SOURCES COLUMN ═══ -->
+<div id="ex-edgar" class="card lyr-source" style="left:1025px; top:148px;">
+  <div class="cname">🏛️ SEC EDGAR</div>
+  <div class="cdesc">35,000+ Form D filings per year — the regulatory record of every private fund raise in the US</div>
+  <div class="ctag">efts.sec.gov</div>
+</div>
+<div id="ex-iapd" class="card lyr-source" style="left:1025px; top:278px;">
+  <div class="cname">🔍 IAPD Adviser Search</div>
+  <div class="cdesc">500,000+ registered investment adviser profiles — the authoritative database of US RIA firms</div>
+  <div class="ctag">adviserinfo.sec.gov</div>
+</div>
+<div id="ex-advpdf" class="card lyr-source" style="left:1025px; top:408px;">
+  <div class="cname">📄 Form ADV Reports</div>
+  <div class="cdesc">Structured adviser filings with AUM breakdowns, client types, number of accounts, and firm structure</div>
+  <div class="ctag">SEC PDF reports</div>
+</div>
+<div id="ex-cais" class="card lyr-source" style="left:1025px; top:538px;">
+  <div class="cname">🏢 CAIS Directory</div>
+  <div class="cdesc">Membership rosters showing which RIA firms are registered on major alternative investment platforms</div>
+  <div class="ctag">Web scrape</div>
+</div>
+<div id="ex-yahoo" class="card lyr-source" style="left:1025px; top:668px;">
+  <div class="cname">📈 Yahoo Finance</div>
+  <div class="cdesc">Live NAV prices and 90-day price history for CION's publicly registered fund lineup</div>
+  <div class="ctag">yfinance API</div>
+</div>
+
+<!-- ═══ INFRASTRUCTURE COLUMN ═══ -->
+<div id="in-railway" class="card lyr-infra" style="left:1275px; top:148px;">
+  <div class="cname">🚂 Railway</div>
+  <div class="cdesc">Hosts the backend API. Receives all data requests from the frontend and automated job triggers</div>
+  <div class="ctag">Backend host</div>
+</div>
+<div id="in-vercel" class="card lyr-infra" style="left:1275px; top:278px;">
+  <div class="cname">▲ Vercel</div>
+  <div class="cdesc">Hosts the Next.js frontend. Serves the product interface globally via CDN with sub-second load times</div>
+  <div class="ctag">Frontend host · CDN</div>
+</div>
+<div id="in-actions" class="card lyr-infra" style="left:1275px; top:408px;">
+  <div class="cname">⚡ GitHub Actions</div>
+  <div class="cdesc">Runs all scheduled jobs without a dedicated server — fires HTTP calls to the API on a daily and weekly cron</div>
+  <div class="ctag">Scheduler</div>
+</div>
+<div id="in-clerk" class="card lyr-infra" style="left:1275px; top:538px;">
+  <div class="cname">🔐 Clerk Auth</div>
+  <div class="cdesc">Manages user sign-in, sessions, and route protection across the entire Next.js application</div>
+  <div class="ctag">Auth provider</div>
+</div>
+
+<!-- ═══ LEGEND ═══ -->
+<div id="legend">
+  <div class="leg-title">Intent Layers</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#78350f"></div>Automated Triggers</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#1d4ed8"></div>What Users See</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#6d28d9"></div>How It's Processed</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#15803d"></div>Central Database</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#b45309"></div>Data Collection</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#334155"></div>External Data Sources</div>
+  <div class="leg-row"><div class="leg-dot" style="background:#1e293b"></div>Infrastructure</div>
+  <hr class="leg-hr">
+  <div class="leg-line">
+    <svg width="30" height="10"><path d="M0,5 L22,5" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#m-blue)" fill="none"/></svg>User request
+  </div>
+  <div class="leg-line">
+    <svg width="30" height="10"><path d="M0,5 L22,5" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="4,2" marker-end="url(#m-green)" fill="none"/></svg>DB read / write
+  </div>
+  <div class="leg-line">
+    <svg width="30" height="10"><path d="M0,5 L22,5" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#m-amber)" fill="none"/></svg>External data pull
+  </div>
+  <div class="leg-line">
+    <svg width="30" height="10"><path d="M0,5 L22,5" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#m-purple)" fill="none"/></svg>Job trigger
+  </div>
+  <hr class="leg-hr">
+  <div class="leg-hint">Hover to preview · Click to lock<br>Click canvas to reset</div>
+</div>
+
+</div><!-- /canvas-wrap -->
+
+<script>
+const BLUE='#3b82f6', GREEN='#22c55e', AMBER='#f59e0b', PURPLE='#8b5cf6', SLATE='#64748b';
+
+const MANIFEST = [
+  // User requests product → intelligence processes
+  ['p-feed',   'i-scorer',    BLUE,   false],
+  ['p-feed',   'i-territory', BLUE,   false],
+  ['p-modal',  'i-enricher',  BLUE,   false],
+  ['p-cion',   'ex-yahoo',    AMBER,  false],
+  ['p-auth',   'in-clerk',    SLATE,  true],
+
+  // Intelligence reads from DB
+  ['i-scorer',    'db-main',  GREEN, true],
+  ['i-territory', 'db-main',  GREEN, true],
+  ['i-enricher',  'db-main',  GREEN, true],
+
+  // Intelligence calls external sources directly (on-demand enrichment)
+  ['i-enricher', 'ex-edgar',  AMBER, false],
+  ['i-enricher', 'ex-iapd',   AMBER, false],
+  ['i-enricher', 'ex-advpdf', AMBER, false],
+
+  // CI/CD triggers the gateway
+  ['ci-daily',    'i-gateway', PURPLE, false],
+  ['ci-adviser',  'i-gateway', PURPLE, false],
+  ['ci-platform', 'i-gateway', PURPLE, false],
+
+  // Gateway spawns pipelines
+  ['i-gateway', 'pl-filing',   PURPLE, false],
+  ['i-gateway', 'pl-adviser',  PURPLE, false],
+  ['i-gateway', 'pl-platform', PURPLE, false],
+
+  // Pipelines write to DB
+  ['pl-filing',   'db-main', GREEN, true],
+  ['pl-adviser',  'db-main', GREEN, true],
+  ['pl-platform', 'db-main', GREEN, true],
+  ['pl-dedup',    'db-main', GREEN, true],
+
+  // Filing collector uses dedup
+  ['pl-filing', 'pl-dedup', AMBER, true],
+
+  // Pipelines pull from external sources
+  ['ex-edgar',  'pl-filing',   AMBER, false],
+  ['ex-iapd',   'pl-adviser',  AMBER, false],
+  ['ex-advpdf', 'pl-adviser',  AMBER, false],
+  ['ex-cais',   'pl-platform', AMBER, false],
+
+  // Infrastructure hosts things
+  ['in-railway', 'i-gateway',  SLATE, true],
+  ['in-vercel',  'p-feed',     SLATE, true],
+  ['in-actions', 'ci-daily',   SLATE, true],
+];
+
+// ── geometry ─────────────────────────────────────────────────────────────────
+const svgEl = document.getElementById('lines');
+const wrap  = document.getElementById('canvas-wrap');
+
+function box(id) {
+  const el = document.getElementById(id);
+  if (!el) return null;
+  const wr = wrap.getBoundingClientRect();
+  const er = el.getBoundingClientRect();
+  const x = er.left - wr.left, y = er.top - wr.top;
+  return { x, y, w: er.width, h: er.height,
+    cx: x+er.width/2, cy: y+er.height/2,
+    r: x+er.width, b: y+er.height };
+}
+
+function drawCurve(from, to, color, dashed) {
+  const fa = box(from), fb = box(to);
+  if (!fa || !fb) return null;
+  const dx = fb.cx - fa.cx, dy = fb.cy - fa.cy;
+  let x1,y1,x2,y2,cx1,cy1,cx2,cy2;
+  if (Math.abs(dx) > Math.abs(dy) * 0.7) {
+    if (dx > 0) { x1=fa.r; y1=fa.cy; x2=fb.x; y2=fb.cy; }
+    else         { x1=fa.x; y1=fa.cy; x2=fb.r; y2=fb.cy; }
+    const p = Math.min(Math.abs(dx)*0.38, 110);
+    cx1=x1+(dx>0?p:-p); cy1=y1; cx2=x2+(dx>0?-p:p); cy2=y2;
+  } else {
+    if (dy > 0) { x1=fa.cx; y1=fa.b;  x2=fb.cx; y2=fb.y; }
+    else         { x1=fa.cx; y1=fa.y;  x2=fb.cx; y2=fb.b; }
+    const p = Math.min(Math.abs(dy)*0.38, 70);
+    cx1=x1; cy1=y1+(dy>0?p:-p); cx2=x2; cy2=y2+(dy>0?-p:p);
+  }
+  const p = document.createElementNS('http://www.w3.org/2000/svg','path');
+  p.setAttribute('d', `M${x1},${y1} C${cx1},${cy1} ${cx2},${cy2} ${x2},${y2}`);
+  p.setAttribute('stroke', color);
+  p.setAttribute('stroke-width', '1.5');
+  p.setAttribute('fill', 'none');
+  if (dashed) p.setAttribute('stroke-dasharray','5,3');
+  const mk = color===BLUE?'blue':color===GREEN?'green':color===AMBER?'amber':color===PURPLE?'purple':'slate';
+  p.setAttribute('marker-end',`url(#m-${mk})`);
+  return p;
+}
+
+// ── build graph ───────────────────────────────────────────────────────────────
+const pathMeta = [];
+const adjMap   = {};
+function adj(id) { if (!adjMap[id]) adjMap[id] = new Set(); }
+
+window.addEventListener('load', () => {
+  MANIFEST.forEach(([from, to, color, dashed]) => {
+    const el = drawCurve(from, to, color, dashed);
+    if (!el) return;
+    svgEl.appendChild(el);
+    pathMeta.push({el, from, to});
+    adj(from); adj(to);
+    adjMap[from].add(to);
+    adjMap[to].add(from);
+  });
+  setupHover();
+});
+
+// ── spotlight ─────────────────────────────────────────────────────────────────
+let lockedId = null;
+
+function applySpotlight(id) {
+  const cards = document.querySelectorAll('.card');
+  const nb = adjMap[id] || new Set();
+  cards.forEach(c => { c.classList.remove('focused','neighbor','dimmed'); c.classList.add('dimmed'); });
+  pathMeta.forEach(({el}) => { el.classList.remove('path-lit','path-dim'); el.classList.add('path-dim'); });
+  const f = document.getElementById(id);
+  if (f) { f.classList.remove('dimmed'); f.classList.add('focused'); }
+  nb.forEach(nid => { const n=document.getElementById(nid); if(n){n.classList.remove('dimmed');n.classList.add('neighbor');} });
+  pathMeta.forEach(({el,from,to}) => { if(from===id||to===id){el.classList.remove('path-dim');el.classList.add('path-lit');} });
+}
+
+function clearSpotlight() {
+  document.querySelectorAll('.card').forEach(c => c.classList.remove('dimmed','focused','neighbor'));
+  pathMeta.forEach(({el}) => el.classList.remove('path-dim','path-lit'));
+  lockedId = null;
+}
+
+function setupHover() {
+  document.querySelectorAll('.card').forEach(card => {
+    card.addEventListener('click', e => {
+      e.stopPropagation();
+      lockedId === card.id ? clearSpotlight() : (lockedId = card.id, applySpotlight(lockedId));
+    });
+    card.addEventListener('mouseenter', () => { if (!lockedId) applySpotlight(card.id); });
+    card.addEventListener('mouseleave', () => { if (!lockedId) clearSpotlight(); });
+  });
+  document.getElementById('canvas-wrap').addEventListener('click', () => { if (lockedId) clearSpotlight(); });
+}
+</script>
+</body>
+</html>
