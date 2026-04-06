@@ -1,20 +1,32 @@
 """
-/api/rias/enrich — backfill AUM + advisor counts for RIAs with null AUM.
+/api/rias endpoints — RIA enrichment and brochure platform scanning.
 
-Data source priority:
-  1. IAPD detail endpoint — fast, structured (works from Railway IPs, 403 from local)
-  2. ADV PDF fallback — slower but works from any IP (same as ADV cache in fund modal)
+Endpoints:
+  POST /api/rias/enrich           — backfill AUM + advisor counts
+  POST /api/rias/scan-brochures   — scan Part 2A brochures for platform keywords
+  GET  /api/rias/stats            — enrichment coverage stats
 
-Protected by INGEST_SECRET bearer token.
+All protected by INGEST_SECRET bearer token.
+
+WHY BROCHURE SCANNING RUNS ON RAILWAY
+──────────────────────────────────────
+IAPD brochure endpoints (api.adviserinfo.sec.gov/firms/brochures/IA/{crd})
+return HTTP 403 from local/residential IPs. Railway's IP range passes these
+blocks. Local brochure_scanner.py delegates to this endpoint rather than
+fetching IAPD directly.
 
 Usage:
     curl -X POST https://pciq-production.up.railway.app/api/rias/enrich \
+         -H "Authorization: Bearer <INGEST_SECRET>"
+
+    curl -X POST https://pciq-production.up.railway.app/api/rias/scan-brochures \
          -H "Authorization: Bearer <INGEST_SECRET>"
 """
 
 import asyncio
 from datetime import datetime, timezone
 
+import httpx
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
 
 from app.config import settings
@@ -22,12 +34,15 @@ from app.db.client import get_db
 from app.ingestion.adv_client import fetch_ria_by_crd
 from app.ingestion.adv_parser import parse_iapd_firm
 from app.ingestion.adv_pdf_parser import fetch_adv_data
-from app.db.writer import upsert_ria
+from app.ingestion.brochure_client import fetch_part2a_text
+from app.ingestion.brochure_scanner import PLATFORM_PHRASES, _scan_text, _is_platform_itself
+from app.db.writer import upsert_ria, upsert_ria_platform
 
 router = APIRouter(prefix="/api/rias")
 
-_BATCH = 10       # RIAs per background run — keeps peak memory ~100MB on Railway
-_DELAY = 0.3      # seconds between requests
+_BATCH        = 10    # RIAs per enrich background run — ~100MB peak on Railway
+_BROCHURE_BATCH = 15  # RIAs per brochure-scan run — each PDF can be 5-10MB
+_DELAY        = 0.3   # seconds between requests
 
 
 def _check_token(authorization: str | None) -> None:
@@ -151,4 +166,116 @@ async def ria_stats(
         "enriched": total - unenriched,
         "unenriched": unenriched,
         "pct_done": round((total - unenriched) / total * 100, 1) if total else 0,
+    }
+
+
+# ── brochure scanning ────────────────────────────────────────────────────────
+
+async def _scan_brochure_batch() -> dict:
+    """
+    Background task: scan the next _BROCHURE_BATCH RIAs for Part 2A platform mentions.
+
+    Picks RIAs where brochure_scanned_at IS NULL, oldest-enriched first.
+    After scan (hit or miss), stamps brochure_scanned_at so they're skipped next run.
+
+    Uses a single shared httpx client for connection reuse.
+    """
+    db = get_db()
+
+    # Fetch next batch — RIAs never yet brochure-scanned, most recently enriched first
+    # (enriched RIAs are more likely to have ADV Part 2A brochures on file)
+    rows = (
+        db.table("rias")
+        .select("crd_number, firm_name")
+        .eq("is_active", True)
+        .is_("brochure_scanned_at", "null")
+        .order("updated_at", desc=True)
+        .limit(_BROCHURE_BATCH)
+        .execute()
+    ).data or []
+
+    hits:     dict[str, list[str]] = {}
+    no_pdf:   int = 0
+    errors:   int = 0
+    scanned:  int = 0
+
+    async with httpx.AsyncClient() as client:
+        for row in rows:
+            crd  = (row.get("crd_number") or "").strip()
+            name = (row.get("firm_name")  or "").strip()
+            if not crd:
+                continue
+
+            scanned += 1
+
+            if _is_platform_itself(name):
+                _stamp_brochure_scan(db, crd)
+                continue
+
+            text, status = await fetch_part2a_text(crd, client)
+
+            if status == "ok" and text:
+                found = _scan_text(text)
+                if found:
+                    hits[crd] = found
+                    for platform in found:
+                        try:
+                            upsert_ria_platform(crd, platform, source="adv_brochure")
+                        except Exception:
+                            pass
+            elif status in ("no_brochures", "no_part2a", "404"):
+                no_pdf += 1
+            else:
+                errors += 1
+
+            _stamp_brochure_scan(db, crd)
+            await asyncio.sleep(_DELAY)
+
+    return {
+        "scanned": scanned,
+        "hits": len(hits),
+        "no_brochure": no_pdf,
+        "errors": errors,
+        "matches": hits,
+    }
+
+
+def _stamp_brochure_scan(db, crd: str) -> None:
+    """Mark this RIA as brochure-scanned so it's skipped next batch."""
+    try:
+        db.table("rias").update({
+            "brochure_scanned_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("crd_number", crd).execute()
+    except Exception:
+        pass
+
+
+@router.post("/scan-brochures")
+async def scan_brochures(
+    background_tasks: BackgroundTasks,
+    authorization: str | None = Header(default=None),
+) -> dict:
+    """
+    Scan the next 15 RIAs' ADV Part 2A brochures for platform keywords (iCapital, CAIS, etc.).
+    Runs in background after immediate response.
+
+    Call repeatedly (with 60s gaps to let batches complete) until all RIAs are scanned.
+    Matches are written to ria_platforms with source='adv_brochure'.
+
+    Requires brochure_scanned_at column on rias table (nullable TIMESTAMPTZ).
+    RIAs are stamped after each scan so they're never re-scanned unless you NULL the column.
+
+    Usage:
+        curl -X POST https://pciq-production.up.railway.app/api/rias/scan-brochures \\
+             -H "Authorization: Bearer <INGEST_SECRET>"
+    """
+    _check_token(authorization)
+    background_tasks.add_task(_scan_brochure_batch)
+    return {
+        "status": "started",
+        "batch": _BROCHURE_BATCH,
+        "message": (
+            f"Scanning next {_BROCHURE_BATCH} RIA brochures in background. "
+            "Wait 60s then call again. Matches written to ria_platforms (source=adv_brochure)."
+        ),
     }

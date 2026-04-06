@@ -1,0 +1,85 @@
+name: Weekly ADV brochure scan
+
+on:
+  schedule:
+    - cron: "0 10 * * 2"   # Every Tuesday 6am ET (10:00 UTC)
+  workflow_dispatch: {}
+
+# Calls /api/rias/scan-brochures 6× with 65s gaps → ~90 RIAs scanned per run.
+# Railway fetches Part 2A brochures from IAPD (works from Railway IPs, 403 locally).
+# Each scan stamps brochure_scanned_at on the RIA so it's never re-scanned.
+# At 90/week: 2,500 RIAs fully scanned in ~28 weeks. Matches written to
+# ria_platforms with source='adv_brochure' — upgrades EDGAR inference to brochure-confirmed.
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scan batch 1 / 6
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.INGEST_SECRET }}" \
+            "https://pciq-production.up.railway.app/api/rias/scan-brochures")
+          echo "Batch 1 HTTP status: $response"
+          if [ "$response" != "200" ]; then exit 1; fi
+
+      - name: Wait 65s (Railway background task)
+        run: sleep 65
+
+      - name: Scan batch 2 / 6
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.INGEST_SECRET }}" \
+            "https://pciq-production.up.railway.app/api/rias/scan-brochures")
+          echo "Batch 2 HTTP status: $response"
+          if [ "$response" != "200" ]; then exit 1; fi
+
+      - name: Wait 65s
+        run: sleep 65
+
+      - name: Scan batch 3 / 6
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.INGEST_SECRET }}" \
+            "https://pciq-production.up.railway.app/api/rias/scan-brochures")
+          echo "Batch 3 HTTP status: $response"
+          if [ "$response" != "200" ]; then exit 1; fi
+
+      - name: Wait 65s
+        run: sleep 65
+
+      - name: Scan batch 4 / 6
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.INGEST_SECRET }}" \
+            "https://pciq-production.up.railway.app/api/rias/scan-brochures")
+          echo "Batch 4 HTTP status: $response"
+          if [ "$response" != "200" ]; then exit 1; fi
+
+      - name: Wait 65s
+        run: sleep 65
+
+      - name: Scan batch 5 / 6
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.INGEST_SECRET }}" \
+            "https://pciq-production.up.railway.app/api/rias/scan-brochures")
+          echo "Batch 5 HTTP status: $response"
+          if [ "$response" != "200" ]; then exit 1; fi
+
+      - name: Wait 65s
+        run: sleep 65
+
+      - name: Scan batch 6 / 6
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.INGEST_SECRET }}" \
+            "https://pciq-production.up.railway.app/api/rias/scan-brochures")
+          echo "Batch 6 HTTP status: $response"
+          if [ "$response" != "200" ]; then exit 1; fi

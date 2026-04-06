@@ -75,24 +75,21 @@ enrich-rias:
 	  -H "Authorization: Bearer $(INGEST_SECRET)" | python3 -m json.tool
 
 # ── ADV brochure platform scanner ────────────────────────────────────────────
-# Scans Form ADV Part 2 brochures for platform mentions (iCapital, CAIS, etc.)
-# Writes matches to ria_platforms with source='adv_brochure'.
-# Pass 1 (EDGAR EFTS): fast, ~2–5 min. Pass 2 (direct brochure fetch): ~30–60 min.
-#   make scan-brochures             # full scan (both passes)
-#   make scan-brochures PASS=1      # EDGAR search only (quick test)
-#   make scan-brochures PASS=2      # direct fetch only
-#   make scan-brochures DRY=1       # dry run — print matches, no DB writes
+# Scans ADV Part 2A brochures for platform mentions (iCapital, CAIS, etc.)
+# Routes through Railway (IAPD blocks local IPs for brochure endpoints).
+# Requires INGEST_SECRET env var. Writes to ria_platforms (source='adv_brochure').
+# Each RIA is stamped brochure_scanned_at after scan — safe to interrupt and re-run.
+#
+# PREREQUISITE: add brochure_scanned_at column to rias table (run once in Supabase SQL):
+#   ALTER TABLE rias ADD COLUMN IF NOT EXISTS brochure_scanned_at TIMESTAMPTZ;
+#
+#   make scan-brochures        # full scan (calls Railway in loop until done)
+#   make scan-brochures V=1    # verbose — print each match as Railway reports it
 scan-brochures:
+	@test -n "$(INGEST_SECRET)" || (echo "ERROR: set INGEST_SECRET env var first\n  export INGEST_SECRET=<your-secret>" && exit 1)
 	$(PYTHON) -m app.ingestion.brochure_scanner \
 	  $(if $(DRY),--dry-run,) \
 	  $(if $(V),--verbose,)
-
-# Test the brochure fetch for one specific CRD before running the full scan.
-# Pick a large firm you know uses iCapital/CAIS (e.g. a big NY wealth manager).
-#   make probe-brochure CRD=123456
-probe-brochure:
-	@test -n "$(CRD)" || (echo "ERROR: set CRD=<number>  e.g. make probe-brochure CRD=123456" && exit 1)
-	$(PYTHON) -m app.ingestion.brochure_scanner --probe $(CRD)
 
 # ── Platform intelligence pipeline ───────────────────────────────────────────
 # Step 1: scrape EDGAR for iCapital/CAIS/etc. access vehicle Form D filings
