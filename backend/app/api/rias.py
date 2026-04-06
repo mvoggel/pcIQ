@@ -27,7 +27,7 @@ import asyncio
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
 
 from app.config import settings
 from app.db.client import get_db
