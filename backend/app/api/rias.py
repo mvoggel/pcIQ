@@ -182,13 +182,14 @@ async def _scan_brochure_batch() -> dict:
     """
     db = get_db()
 
-    # Fetch next batch — RIAs never yet brochure-scanned, most recently enriched first
-    # (enriched RIAs are more likely to have ADV Part 2A brochures on file)
+    # Fetch next batch — SEC-registered only (aum IS NOT NULL = filed ADV with SEC = has IAPD entry).
+    # State-registered firms (aum IS NULL) always 403 on IAPD brochure endpoints — skip them.
     rows = (
         db.table("rias")
         .select("crd_number, firm_name")
         .eq("is_active", True)
         .is_("brochure_scanned_at", "null")
+        .not_.is_("aum", "null")
         .order("updated_at", desc=True)
         .limit(_BROCHURE_BATCH)
         .execute()
