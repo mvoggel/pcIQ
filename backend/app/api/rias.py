@@ -194,10 +194,11 @@ async def _scan_brochure_batch() -> dict:
         .execute()
     ).data or []
 
-    hits:     dict[str, list[str]] = {}
-    no_pdf:   int = 0
-    errors:   int = 0
-    scanned:  int = 0
+    hits:         dict[str, list[str]] = {}
+    no_pdf:       int = 0
+    errors:       int = 0
+    scanned:      int = 0
+    status_tally: dict[str, int] = {}  # e.g. {"ok": 3, "403": 8, "no_brochures": 4}
 
     async with httpx.AsyncClient() as client:
         for row in rows:
@@ -213,6 +214,7 @@ async def _scan_brochure_batch() -> dict:
                 continue
 
             text, status = await fetch_part2a_text(crd, client)
+            status_tally[status] = status_tally.get(status, 0) + 1
 
             if status == "ok" and text:
                 found = _scan_text(text)
@@ -223,7 +225,9 @@ async def _scan_brochure_batch() -> dict:
                             upsert_ria_platform(crd, platform, source="adv_brochure")
                         except Exception:
                             pass
-            elif status in ("no_brochures", "no_part2a", "404"):
+            elif status in ("no_brochures", "no_part2a", "404", "403"):
+                # 403 = IAPD blocking this specific firm (state-registered or exempt)
+                # same as no-brochure: not an application error
                 no_pdf += 1
             else:
                 errors += 1
@@ -232,11 +236,12 @@ async def _scan_brochure_batch() -> dict:
             await asyncio.sleep(_DELAY)
 
     return {
-        "scanned": scanned,
-        "hits": len(hits),
+        "scanned":  scanned,
+        "hits":     len(hits),
         "no_brochure": no_pdf,
-        "errors": errors,
-        "matches": hits,
+        "errors":   errors,
+        "statuses": status_tally,   # breakdown: what IAPD returned for each firm
+        "matches":  hits,
     }
 
 
