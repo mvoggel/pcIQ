@@ -233,15 +233,24 @@ def _load_edgar_cross_ref() -> list[dict]:
         print(f"  RIAs with private_fund_aum > 0: {len(ria_crds)}")
 
         if not ria_crds:
-            # Fallback: any enriched RIA (has AUM data)
-            ria_result = (
-                db.table("rias")
-                .select("crd_number")
-                .not_.is_("aum", "null")
-                .eq("is_active", True)
-                .execute()
-            )
-            ria_crds = [r["crd_number"] for r in (ria_result.data or []) if r.get("crd_number")]
+            # Fallback: any enriched RIA (has AUM data) — paginate to bypass 1000-row limit
+            ria_crds = []
+            page_size = 1000
+            offset = 0
+            while True:
+                ria_result = (
+                    db.table("rias")
+                    .select("crd_number")
+                    .not_.is_("aum", "null")
+                    .eq("is_active", True)
+                    .range(offset, offset + page_size - 1)
+                    .execute()
+                )
+                batch = [r["crd_number"] for r in (ria_result.data or []) if r.get("crd_number")]
+                ria_crds.extend(batch)
+                if len(batch) < page_size:
+                    break
+                offset += page_size
             print(f"  Fallback — RIAs with any AUM: {len(ria_crds)}")
 
         results = []

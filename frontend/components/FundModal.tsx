@@ -397,41 +397,65 @@ function ConfirmedAllocators({ rias, loading }: { rias: ConfirmedRia[] | undefin
   if (!rias || rias.length === 0) return null;
 
   const uniquePlatforms = [...new Set(rias.flatMap((r) => r.matched_platforms))];
+  const csvRows = rias.filter((r) => r.source === "csv" || r.source === "scrape");
+  const inferredRows = rias.filter((r) => r.source === "edgar_inferred");
+  const hasConfirmed = csvRows.length > 0;
+
+  // Header copy and color depend on whether we have any hard-confirmed rows
+  const headerLabel = hasConfirmed
+    ? "Platform Allocators"
+    : "Platform Inferred Allocators";
+  const subLabel = hasConfirmed
+    ? `${csvRows.length} confirmed · ${inferredRows.length} inferred · ${uniquePlatforms.join(", ")}`
+    : `${rias.length} RIA${rias.length !== 1 ? "s" : ""} · EDGAR inferred · ${uniquePlatforms.join(", ")}`;
+  const tooltipText = hasConfirmed
+    ? `Three-signal match: (1) this fund distributes via ${uniquePlatforms.join("/")} (Form D salesCompensationList), (2) each RIA is a registered platform partner (platform advisor directory — CSV confirmed), and (3) each RIA is in this fund's solicitation territory.`
+    : `EDGAR inference: (1) this fund lists ${uniquePlatforms.join("/")} as a paid distributor in its Form D filing, (2) each RIA has documented private fund exposure in their Form ADV, and (3) each RIA is in this fund's solicitation territory. Platform membership is inferred — not yet confirmed from a platform advisor directory. Import a CSV export from iCapital/CAIS to upgrade rows to confirmed.`;
+  const footerText = hasConfirmed
+    ? `${csvRows.length} CSV-confirmed platform partner${csvRows.length !== 1 ? "s" : ""} · ${inferredRows.length > 0 ? `${inferredRows.length} EDGAR inferred` : ""} · Source: platform directory + Form ADV`
+    : `EDGAR inferred — platform membership derived from Form D filings and ADV private fund data, not a direct platform directory. These are high-probability prospects, not confirmed allocations.`;
+
+  const borderColor = hasConfirmed ? "border-emerald-200" : "border-blue-200";
+  const headerBg = hasConfirmed ? "bg-emerald-50 border-emerald-100" : "bg-blue-50 border-blue-100";
+  const headerText = hasConfirmed ? "text-emerald-800" : "text-blue-800";
+  const subText = hasConfirmed ? "text-emerald-600" : "text-blue-600";
+  const footerBg = hasConfirmed ? "bg-emerald-50 border-emerald-100" : "bg-blue-50 border-blue-100";
+  const footerText2 = hasConfirmed ? "text-emerald-700" : "text-blue-700";
 
   return (
-    <div className="border border-emerald-200 rounded-lg overflow-hidden">
+    <div className={`border ${borderColor} rounded-lg overflow-hidden`}>
       {/* Header banner */}
-      <div className="px-4 py-2 bg-emerald-50 border-b border-emerald-100 flex items-center gap-2">
+      <div className={`px-4 py-2 ${headerBg} border-b flex items-center gap-2`}>
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-emerald-800 uppercase tracking-wider">
-              Confirmed Advisors Buying This Strategy
+            <span className={`text-xs font-semibold ${headerText} uppercase tracking-wider`}>
+              {headerLabel}
             </span>
-            <span className="text-xs text-emerald-600">
-              · {rias.length} RIA{rias.length !== 1 ? "s" : ""} · {uniquePlatforms.join(", ")}
-            </span>
-            <InfoTooltip color="emerald" text={`Three-signal match: (1) this fund distributes via ${uniquePlatforms.join("/")} (Form D salesCompensationList), (2) each RIA here is a registered ${uniquePlatforms.join("/")} partner (platform directory), and (3) each RIA is headquartered in this fund's solicitation territory. All three signals must hold — these are confirmed probable buyers, not just geographic matches.`} />
+            <span className={`text-xs ${subText}`}>· {subLabel}</span>
+            <InfoTooltip color={hasConfirmed ? "emerald" : "slate"} text={tooltipText} />
           </div>
-          <p className="text-xs text-emerald-600 mt-0.5">Confirmed platform relationship · In territory</p>
+          <p className={`text-xs ${subText} mt-0.5`}>
+            {hasConfirmed ? "Platform partner · In territory · Highest confidence" : "EDGAR inferred · In territory · Import CSV to confirm"}
+          </p>
         </div>
       </div>
 
-      <div className="divide-y divide-emerald-50 px-4 bg-white">
+      <div className="divide-y divide-slate-50 px-4 bg-white">
         {rias.map((ria) => (
           <ConfirmedRiaRow key={ria.crd_number} ria={ria} />
         ))}
       </div>
 
-      <div className="px-4 py-2 bg-emerald-50 border-t border-emerald-100">
-        <p className="text-xs text-emerald-700">
-          Confirmed platform relationship · These firms are registered {uniquePlatforms.join(" / ")} partners in this territory · Source: platform directory + Form ADV
-        </p>
+      <div className={`px-4 py-2 ${footerBg} border-t`}>
+        <p className={`text-xs ${footerText2}`}>{footerText}</p>
       </div>
     </div>
   );
 }
 
 function LikelyAllocators({ rias, loading }: { rias: RiaMatch[] | undefined; loading: boolean }) {
+  const [filterLarge, setFilterLarge] = useState(false);
+
   if (loading) {
     return (
       <div className="space-y-2">
@@ -453,16 +477,50 @@ function LikelyAllocators({ rias, loading }: { rias: RiaMatch[] | undefined; loa
     );
   }
 
+  const filtered = filterLarge ? rias.filter((r) => r.aum != null && r.aum >= 100_000_000) : rias;
+  const largeCount = rias.filter((r) => r.aum != null && r.aum >= 100_000_000).length;
+  const totalAum = rias.reduce((sum, r) => sum + (r.aum ?? 0), 0);
+  const totalAumStr = totalAum >= 1e12
+    ? `$${(totalAum / 1e12).toFixed(1)}T`
+    : totalAum >= 1e9
+    ? `$${(totalAum / 1e9).toFixed(0)}B`
+    : `$${(totalAum / 1e6).toFixed(0)}M`;
+
   return (
     <div className="border border-slate-200 rounded-lg overflow-hidden">
+      {/* Stat + filter bar */}
+      <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
+          <span className="font-semibold text-slate-800 text-sm">{rias.length} RIAs</span>
+          <span className="text-slate-300">·</span>
+          <span>{totalAumStr} total AUM in territory</span>
+          <span className="text-slate-300">·</span>
+          <span>{largeCount} firms over $100M AUM</span>
+        </div>
+        <button
+          onClick={() => setFilterLarge((f) => !f)}
+          className={`text-xs px-2.5 py-1 rounded border font-medium transition-colors whitespace-nowrap ${
+            filterLarge
+              ? "bg-blue-600 text-white border-blue-600"
+              : "text-slate-500 border-slate-300 hover:border-blue-400 hover:text-blue-600"
+          }`}
+        >
+          $100M+ AUM
+        </button>
+      </div>
+
       <div className="divide-y divide-slate-100 px-4">
-        {rias.map((ria) => (
-          <RiaRow key={ria.crd_number} ria={ria} />
-        ))}
+        {filtered.length === 0 ? (
+          <p className="text-xs text-slate-400 py-4 text-center">No RIAs over $100M AUM in this territory.</p>
+        ) : (
+          filtered.map((ria) => (
+            <RiaRow key={ria.crd_number} ria={ria} />
+          ))
+        )}
       </div>
       <div className="px-4 py-2 bg-slate-50 border-t border-slate-100">
         <p className="text-xs text-slate-400">
-          Profile match only — RIAs in territory with $100M+ AUM · Not confirmed allocations · Source: Form ADV
+          Profile match only — RIAs in territory{filterLarge ? " · $100M+ AUM filter active" : " · $100M+ AUM"} · Not confirmed allocations · Source: Form ADV
         </p>
       </div>
     </div>

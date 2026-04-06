@@ -17,15 +17,34 @@ function formatDate(d: string | null): string {
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-// ── overflow tooltip: shows remaining items on hover ─────────────────────────
+// ── overflow tooltip: shows remaining items on hover or tap ──────────────────
 
 function OverflowTooltip({ items, label }: { items: string[]; label: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent | TouchEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("touchstart", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("touchstart", close);
+    };
+  }, [open]);
+
   return (
-    <span className="relative group inline-block">
-      <span className="text-xs text-blue-500 cursor-default underline decoration-dotted">
+    <span ref={ref} className="relative inline-block">
+      <span
+        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        className="text-xs text-blue-500 cursor-pointer underline decoration-dotted select-none"
+      >
         +{items.length} {label}
       </span>
-      <span className="pointer-events-none absolute bottom-full left-0 mb-1.5 w-64 bg-slate-800 text-white text-xs rounded-lg px-3 py-2 opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-xl whitespace-normal break-words leading-relaxed">
+      <span className={`pointer-events-none absolute bottom-full left-0 mb-1.5 w-64 bg-slate-800 text-white text-xs rounded-lg px-3 py-2 transition-opacity z-50 shadow-xl whitespace-normal break-words leading-relaxed ${open ? "opacity-100" : "opacity-0"}`}>
         {items.join(", ")}
         <span className="absolute top-full left-4 border-4 border-transparent border-t-slate-800" />
       </span>
