@@ -115,7 +115,8 @@ async def _trigger_batch(client: httpx.AsyncClient, token: str) -> dict | None:
 
 async def _count_unscanned() -> int:
     """
-    How many RIAs still have brochure_scanned_at IS NULL?
+    How many SEC-registered RIAs still have brochure_scanned_at IS NULL?
+    Mirrors the Railway query filter exactly (aum IS NOT NULL = SEC-registered).
     Queries Supabase directly (no Railway needed for reads).
     """
     from app.db.client import get_db
@@ -126,6 +127,7 @@ async def _count_unscanned() -> int:
             .select("*", count="exact")
             .eq("is_active", True)
             .is_("brochure_scanned_at", "null")
+            .not_.is_("aum", "null")
             .execute()
         )
         return res.count or 0
@@ -199,12 +201,18 @@ async def run(dry_run: bool = False, verbose: bool = False) -> None:
             total_hits  += batch_hits
             total_scans += batch_scans
             matches      = result.get("matches", {})
+            statuses     = result.get("statuses", {})
+
+            # Summarise statuses — e.g. "ok:3 403:9 no_brochures:3"
+            status_str = "  ".join(
+                f"{k}:{v}" for k, v in sorted(statuses.items(), key=lambda x: -x[1])
+            ) if statuses else "—"
 
             elapsed = time.monotonic() - start
             print(
                 f"  Call {call_num:3d} | scanned {batch_scans:2d} | "
                 f"hits {batch_hits} | total hits {total_hits} | "
-                f"{remaining:,} remaining | {elapsed/60:.1f}m elapsed"
+                f"{remaining:,} remaining | {elapsed/60:.1f}m  [{status_str}]"
             )
 
             if verbose and matches:
