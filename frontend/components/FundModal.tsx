@@ -570,11 +570,16 @@ export default function FundModal({ signal, onClose }: Props) {
   const loading = loadingDetail;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+      onTouchMove={(e) => e.preventDefault()}
+    >
       <div className="absolute inset-0 bg-black/40" />
       <div
-        className="relative bg-white rounded-xl shadow-2xl w-full max-w-xl max-h-[92vh] overflow-y-auto overscroll-y-contain"
+        className="relative bg-white rounded-xl shadow-2xl w-full max-w-xl max-h-[92vh] overflow-y-auto overflow-x-hidden overscroll-contain"
         onClick={(e) => e.stopPropagation()}
+        onTouchMove={(e) => e.stopPropagation()}
       >
         {/* ── Header ── */}
         <div className="px-6 pt-6 pb-4 border-b border-slate-100">
