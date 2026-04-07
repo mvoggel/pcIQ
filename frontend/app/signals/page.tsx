@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import AppHeader from "@/components/AppHeader";
-import TerritoryTabs from "@/components/TerritoryTabs";
 import SignalTable from "@/components/SignalTable";
 import PlatformPanel from "@/components/PlatformPanel";
 import { fetchSignals } from "@/lib/api";
@@ -42,50 +41,57 @@ export default function SignalsPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <AppHeader
-        rightSlot={
-          <div className="flex items-center gap-1">
-            <span className="text-slate-500 text-xs mr-2">Lookback</span>
-            {DAY_OPTIONS.map((d) => (
-              <button
-                key={d}
-                onClick={() => setDays(d)}
-                className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                  days === d
-                    ? "bg-blue-600 text-white"
-                    : "text-slate-400 hover:text-white hover:bg-slate-700"
-                }`}
-              >
-                {d}d
-              </button>
-            ))}
+      <AppHeader />
+
+      {/* Unified dark subheader — territory + lookback, matching Advisors UX */}
+      <div className="bg-slate-800 border-b border-slate-700">
+        <div className="px-4 sm:px-6 py-3 max-w-screen-xl mx-auto flex flex-col sm:flex-row sm:items-center gap-3">
+          {/* Title */}
+          <div className="shrink-0">
+            <h1 className="text-sm font-semibold text-white">Fund Signals</h1>
+            <p className="text-xs text-slate-400 mt-0.5">Competitor private credit activity from EDGAR Form D</p>
           </div>
-        }
-      />
 
-      {/* Territory tabs */}
-      <TerritoryTabs territories={TERRITORIES} active={territory} onChange={setTerritory} />
+          <div className="flex flex-wrap items-center gap-3 sm:ml-auto">
+            {/* Territory */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs text-slate-400 shrink-0">Territory</span>
+              {TERRITORIES.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTerritory(t)}
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                    territory === t
+                      ? "bg-blue-600 text-white"
+                      : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
 
-      {/* Headline stat bar */}
-      <div className="bg-slate-900 border-b border-blue-500/30">
-        <div className="px-4 sm:px-6 py-2 max-w-screen-xl mx-auto flex items-center gap-4 sm:gap-6 overflow-x-auto text-xs text-slate-400 whitespace-nowrap">
-          <span>
-            <span className="font-semibold text-blue-400">2,543</span> RIAs tracked
-          </span>
-          <span className="text-slate-600">·</span>
-          <span>
-            <span className="font-semibold text-blue-400">$5.6T</span> AUM represented
-          </span>
-          <span className="text-slate-600">·</span>
-          <span>
-            <span className="font-semibold text-blue-400">44</span> states
-          </span>
-          <span className="text-slate-600">·</span>
-          <span>
-            <span className="font-semibold text-blue-400">138</span> feeder funds indexed
-          </span>
-          <span className="text-slate-600">·</span>
-          <span>Built entirely from public SEC data</span>
+            {/* Divider */}
+            <div className="hidden sm:block h-4 w-px bg-slate-600" />
+
+            {/* Lookback */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-slate-400 shrink-0">Lookback</span>
+              {DAY_OPTIONS.map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setDays(d)}
+                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                    days === d
+                      ? "bg-blue-600 text-white"
+                      : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                  }`}
+                >
+                  {d}d
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -108,7 +114,7 @@ export default function SignalsPage() {
 
         {data && !loading && (
           <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
-            {/* Signal feed — first on mobile */}
+            {/* Signal feed */}
             <div className="flex-1 min-w-0 order-1">
               {/* Toolbar: count + search */}
               <div className="mb-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
@@ -148,7 +154,7 @@ export default function SignalsPage() {
               <SignalTable signals={filteredSignals(data, query)} />
             </div>
 
-            {/* Platform panel — sidebar on desktop, below on mobile */}
+            {/* Platform panel — sidebar on desktop */}
             <aside className="w-full lg:w-52 lg:shrink-0 lg:pt-1 order-2">
               <PlatformPanel platformCounts={data.platform_counts} />
             </aside>

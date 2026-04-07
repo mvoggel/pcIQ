@@ -47,9 +47,9 @@ export default function AppHeader({ rightSlot }: Props) {
     <header className="bg-slate-900 text-white">
       {/* Top row: logo + wordmark + right slot */}
       <div className="px-4 sm:px-6 flex items-center justify-between py-2">
-        <div className="flex items-end gap-2.5">
+        <div className="flex items-center gap-2.5">
           <AnimatedLogo />
-          <span className="text-lg font-bold tracking-tight mb-1">pcIQ</span>
+          <span className="text-lg font-bold tracking-tight">pcIQ</span>
         </div>
         {rightSlot && (
           <div className="flex items-center gap-1">{rightSlot}</div>

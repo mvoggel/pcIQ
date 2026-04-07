@@ -105,6 +105,24 @@ export default function CionPage() {
     <div className="min-h-screen bg-slate-50">
       <AppHeader />
 
+      {/* ── Platform stats callout ──────────────────────────────────── */}
+      <div className="bg-slate-800 border-b border-slate-700">
+        <div className="px-6 py-4 max-w-screen-lg mx-auto grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {[
+            { value: "2,543", label: "RIAs tracked" },
+            { value: "$5.6T",  label: "AUM represented" },
+            { value: "44",     label: "states covered" },
+            { value: "138",    label: "feeder funds indexed" },
+          ].map(({ value, label }) => (
+            <div key={label} className="text-center">
+              <p className="text-xl font-bold text-blue-400">{value}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{label}</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-center text-xs text-slate-500 pb-3">Built entirely from public SEC data</p>
+      </div>
+
       <main className="px-6 py-8 max-w-screen-lg mx-auto">
 
         {/* ── CION own funds ──────────────────────────────────────────── */}
