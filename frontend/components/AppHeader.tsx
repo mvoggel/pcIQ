@@ -12,9 +12,9 @@ export default function AppHeader({ rightSlot }: Props) {
   const pathname = usePathname();
 
   const navItems = [
-    { href: "/signals", label: "Competitive Intel" },
-    { href: "/cion", label: "CION Funds" },
+    { href: "/signals", label: "Funds" },
     { href: "/advisors", label: "Advisors" },
+    { href: "/cion", label: "CION IQ" },
   ];
 
   return (
@@ -31,8 +31,6 @@ export default function AppHeader({ rightSlot }: Props) {
             priority
           />
           <span className="text-lg font-bold tracking-tight">pcIQ</span>
-          <span className="hidden sm:inline text-slate-500 text-sm">|</span>
-          <span className="hidden sm:inline text-slate-400 text-sm">Private Credit Intelligence</span>
         </div>
         {rightSlot && (
           <div className="flex items-center gap-1">{rightSlot}</div>
