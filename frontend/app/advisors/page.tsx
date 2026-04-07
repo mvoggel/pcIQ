@@ -206,22 +206,31 @@ export default function AdvisorsPage() {
 
         {data && !loading && (
           <>
-            {/* Top 10 panel */}
-            <TopAdvisorsPanel advisors={data.advisors} territory={data.territory} />
+            {/* Top 10 panel — hidden while search is active */}
+            {!query && (
+              <TopAdvisorsPanel advisors={data.advisors} territory={data.territory} />
+            )}
 
             {/* Full list divider */}
             <div className="flex items-center gap-3 mb-3">
-              <h2 className="text-sm font-semibold text-slate-700 shrink-0">All Advisors</h2>
+              <h2 className="text-sm font-semibold text-slate-700 shrink-0">
+                {query ? "Search Results" : "All Advisors"}
+              </h2>
               <div className="h-px flex-1 bg-slate-200" />
+              {!query && data.advisors.length > 10 && (
+                <span className="text-xs text-slate-400 shrink-0">showing #{11}–{data.advisors.length}</span>
+              )}
             </div>
 
             {/* Toolbar */}
             <div className="mb-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
               <div className="shrink-0 text-sm font-medium text-slate-700">
-                {filtered.length}
-                {query && <span className="text-slate-400"> of {data.advisors.length}</span>}
-                {" "}advisor{data.advisors.length !== 1 ? "s" : ""}
-                {data.territory !== "All" ? ` in ${data.territory}` : ""}
+                {query ? (
+                  <>{filtered.length}<span className="text-slate-400"> of {data.advisors.length}</span> advisor{data.advisors.length !== 1 ? "s" : ""}</>
+                ) : (
+                  <>{Math.max(0, filtered.length - 10)} advisor{filtered.length - 10 !== 1 ? "s" : ""} below top 10</>
+                )}
+                {data.territory !== "All" ? ` · ${data.territory}` : ""}
               </div>
               <div className="relative sm:flex-1 sm:max-w-xs sm:ml-auto">
                 <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -260,17 +269,23 @@ export default function AdvisorsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="py-12 text-center text-slate-400 text-sm">
-                        No advisors found
-                      </td>
-                    </tr>
-                  ) : (
-                    filtered.map((a, i) => (
-                      <AdvisorRow key={a.crd_number || i} advisor={a} rank={i + 1} />
-                    ))
-                  )}
+                  {(() => {
+                    // When no search: skip top 10 (they're shown in the panel above)
+                    const tableRows = query ? filtered : filtered.slice(10);
+                    const rankOffset = query ? 0 : 10;
+                    if (tableRows.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={5} className="py-12 text-center text-slate-400 text-sm">
+                            {query ? "No advisors match your search" : "No additional advisors beyond top 10"}
+                          </td>
+                        </tr>
+                      );
+                    }
+                    return tableRows.map((a, i) => (
+                      <AdvisorRow key={a.crd_number || i} advisor={a} rank={rankOffset + i + 1} />
+                    ));
+                  })()}
                 </tbody>
               </table>
             </div>

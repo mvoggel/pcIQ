@@ -106,6 +106,7 @@ export interface AdvisorProfile {
   private_fund_aum_fmt: string | null;
   num_advisors: number | null;
   platforms: string[];
+  platform_sources: Record<string, string>;  // {platform: "csv"|"adv_brochure"|"edgar_inferred"}
   platform_count: number;
   allocation_count_90d: number;
   activity_score: number;

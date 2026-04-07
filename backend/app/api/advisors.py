@@ -93,15 +93,20 @@ def get_advisors(
     # Supabase .in_() supports up to 500 values via PostgREST
     platforms_rows = (
         db.table("ria_platforms")
-        .select("crd_number, platform_name")
+        .select("crd_number, platform_name, source")
         .in_("crd_number", crd_set[:500])
         .execute()
         .data or []
     )
     platforms_by_crd: dict[str, list[str]] = {}
+    # source per platform: "csv" | "adv_brochure" | "edgar_inferred" | "scrape"
+    platform_sources_by_crd: dict[str, dict[str, str]] = {}
     for p in platforms_rows:
         crd = p["crd_number"]
-        platforms_by_crd.setdefault(crd, []).append(p["platform_name"])
+        name = p["platform_name"]
+        src = p.get("source") or "edgar_inferred"
+        platforms_by_crd.setdefault(crd, []).append(name)
+        platform_sources_by_crd.setdefault(crd, {})[name] = src
 
     # ── 4. Fetch recent allocation counts ─────────────────────────────
     cutoff = (date.today() - timedelta(days=90)).isoformat()
@@ -127,6 +132,7 @@ def get_advisors(
         aum = r.get("aum")
         private_fund_aum = r.get("private_fund_aum")
         platform_list = sorted(set(platforms_by_crd.get(crd, [])))
+        platform_sources = platform_sources_by_crd.get(crd, {})
         allocation_count = alloc_count_by_id.get(ria_id, 0)
 
         score = (
@@ -148,6 +154,7 @@ def get_advisors(
             "private_fund_aum_fmt": _fmt_aum(private_fund_aum),
             "num_advisors": r.get("num_advisors"),
             "platforms": platform_list,
+            "platform_sources": platform_sources,  # {platform: "csv"|"adv_brochure"|"edgar_inferred"}
             "platform_count": len(platform_list),
             "allocation_count_90d": allocation_count,
             "activity_score": round(score, 2),
