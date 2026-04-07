@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import AppHeader from "@/components/AppHeader";
+import TopAdvisorsPanel from "@/components/TopAdvisorsPanel";
 import { fetchAdvisors } from "@/lib/api";
 import { AdvisorProfile, AdvisorsResponse } from "@/lib/types";
 
@@ -205,6 +206,15 @@ export default function AdvisorsPage() {
 
         {data && !loading && (
           <>
+            {/* Top 10 panel */}
+            <TopAdvisorsPanel advisors={data.advisors} territory={data.territory} />
+
+            {/* Full list divider */}
+            <div className="flex items-center gap-3 mb-3">
+              <h2 className="text-sm font-semibold text-slate-700 shrink-0">All Advisors</h2>
+              <div className="h-px flex-1 bg-slate-200" />
+            </div>
+
             {/* Toolbar */}
             <div className="mb-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
               <div className="shrink-0 text-sm font-medium text-slate-700">
