@@ -154,11 +154,11 @@ export default function AdvisorsPage() {
     <div className="min-h-screen bg-slate-50">
       <AppHeader />
 
-      {/* Subheader */}
-      <div className="bg-white border-b border-slate-200">
+      {/* Subheader — dark, matching nav */}
+      <div className="bg-slate-800 border-b border-slate-700">
         <div className="px-4 sm:px-6 py-3 max-w-screen-xl mx-auto flex flex-col sm:flex-row sm:items-center gap-3">
           <div className="flex-1">
-            <h1 className="text-sm font-semibold text-slate-900">
+            <h1 className="text-sm font-semibold text-white">
               Advisor Intelligence
             </h1>
             <p className="text-xs text-slate-400 mt-0.5">
@@ -168,7 +168,7 @@ export default function AdvisorsPage() {
 
           {/* Territory filter */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-slate-500 shrink-0">Territory</span>
+            <span className="text-xs text-slate-400 shrink-0">Territory</span>
             <div className="flex flex-wrap gap-1">
               {TERRITORIES.map((t) => (
                 <button
@@ -177,7 +177,7 @@ export default function AdvisorsPage() {
                   className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
                     territory === t
                       ? "bg-blue-600 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      : "bg-slate-700 text-slate-300 hover:bg-slate-600"
                   }`}
                 >
                   {t || "All"}
@@ -213,12 +213,12 @@ export default function AdvisorsPage() {
 
             {/* Full list divider */}
             <div className="flex items-center gap-3 mb-3">
-              <h2 className="text-sm font-semibold text-slate-700 shrink-0">
+              <h2 className="text-sm font-semibold text-slate-900 shrink-0">
                 {query ? "Search Results" : "All Advisors"}
               </h2>
               <div className="h-px flex-1 bg-slate-200" />
               {!query && data.advisors.length > 10 && (
-                <span className="text-xs text-slate-400 shrink-0">showing #{11}–{data.advisors.length}</span>
+                <span className="text-xs text-slate-400 shrink-0">#{11}–{data.advisors.length}</span>
               )}
             </div>
 
