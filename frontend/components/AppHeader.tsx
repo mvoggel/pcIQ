@@ -38,8 +38,8 @@ export default function AppHeader({ rightSlot }: Props) {
   const pathname = usePathname();
 
   const navItems = [
-    { href: "/signals",  label: "Funds"    },
     { href: "/advisors", label: "Advisors" },
+    { href: "/signals",  label: "Funds"    },
     { href: "/cion",     label: "CION IQ"  },
   ];
 
