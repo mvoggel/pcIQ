@@ -16,6 +16,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "pcIQ — Private Credit Intelligence",
   description: "Territory signal feed for private credit distribution",
+  icons: {
+    icon: [
+      { url: "/pciq_logo_16.png",  sizes: "16x16",  type: "image/png" },
+      { url: "/pciq_logo_32.png",  sizes: "32x32",  type: "image/png" },
+      { url: "/pciq_logo_48.png",  sizes: "48x48",  type: "image/png" },
+    ],
+    apple: { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+  },
 };
 
 export default function RootLayout({

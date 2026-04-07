@@ -1,0 +1,45 @@
+<svg width="64" height="64" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .pulse {
+        animation: pulse 2.5s infinite ease-in-out;
+      }
+      .glow {
+        animation: glow 2s infinite ease-in-out;
+      }
+      @keyframes pulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.05); opacity: 0.85; }
+      }
+      @keyframes glow {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.6; }
+      }
+    </style>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="48" fill="#0F2A44"/>
+
+  <!-- Brain outline -->
+  <g stroke="white" stroke-width="2.5" fill="none" class="pulse">
+    <path d="M30 50 C30 30, 45 30, 50 40 C55 30, 70 30, 70 50
+             C70 70, 55 70, 50 60 C45 70, 30 70, 30 50 Z"/>
+  </g>
+
+  <!-- Nodes -->
+  <g fill="white" class="glow">
+    <circle cx="35" cy="45" r="2"/>
+    <circle cx="65" cy="45" r="2"/>
+    <circle cx="40" cy="60" r="2"/>
+    <circle cx="60" cy="60" r="2"/>
+  </g>
+
+  <!-- Lightbulb -->
+  <g stroke="white" stroke-width="2.5" fill="none" class="glow">
+    <path d="M50 35 C45 35, 43 40, 43 43 C43 48, 47 50, 50 50
+             C53 50, 57 48, 57 43 C57 40, 55 35, 50 35 Z"/>
+    <line x1="47" y1="52" x2="53" y2="52"/>
+    <line x1="48" y1="55" x2="52" y2="55"/>
+  </g>
+</svg>
