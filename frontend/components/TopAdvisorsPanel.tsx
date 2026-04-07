@@ -294,11 +294,11 @@ function TopAdvisorCard({ advisor, rank }: { advisor: AdvisorProfile; rank: numb
 
         {/* Signal bullets */}
         {signals.length > 0 ? (
-          <ul className="space-y-1 mb-3">
+          <ul className="space-y-1.5 mb-3">
             {signals.map((s, i) => (
-              <li key={i} className="flex items-start gap-2 text-xs text-slate-600">
+              <li key={i} className="flex items-start gap-2 text-xs">
                 <span className="text-slate-300 mt-0.5 shrink-0">•</span>
-                <span>{s.bullet}</span>
+                <span className="text-slate-800 font-medium leading-relaxed">{s.bullet}</span>
               </li>
             ))}
           </ul>
