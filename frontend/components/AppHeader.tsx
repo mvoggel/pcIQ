@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -20,7 +21,15 @@ export default function AppHeader({ rightSlot }: Props) {
     <header className="bg-slate-900 text-white">
       {/* Top row: logo + right slot */}
       <div className="px-4 sm:px-6 flex items-center justify-between py-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
+          <Image
+            src="/logo.png"
+            alt="pcIQ"
+            width={30}
+            height={30}
+            className="rounded-full"
+            priority
+          />
           <span className="text-lg font-bold tracking-tight">pcIQ</span>
           <span className="hidden sm:inline text-slate-500 text-sm">|</span>
           <span className="hidden sm:inline text-slate-400 text-sm">Private Credit Intelligence</span>
