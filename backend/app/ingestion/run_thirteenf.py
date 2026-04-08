@@ -164,18 +164,30 @@ async def run(
             "debug_sample":       debug_sample,
         }
 
-    # ── 4. Upsert in batches ──────────────────────────────────────────
+    # ── 4. Deduplicate within batch (same filer+period+cusip → sum value) ──
+    dedup: dict[tuple, dict] = {}
+    for r in rows_to_upsert:
+        key = (r["filer_cik"], r["period_of_report"], r["cusip"])
+        if key in dedup:
+            dedup[key]["value_usd"] += r["value_usd"]
+            dedup[key]["shares"]    += r["shares"]
+        else:
+            dedup[key] = dict(r)
+    deduped = list(dedup.values())
+    log.info("After dedup: %d rows (was %d)", len(deduped), len(rows_to_upsert))
+
+    # ── 5. Upsert in batches ──────────────────────────────────────────
     batch_size = 200
     upserted   = 0
-    for i in range(0, len(rows_to_upsert), batch_size):
-        batch = rows_to_upsert[i : i + batch_size]
+    for i in range(0, len(deduped), batch_size):
+        batch = deduped[i : i + batch_size]
         db.table("thirteenf_holdings").upsert(
             batch,
             on_conflict="filer_cik,period_of_report,cusip",
         ).execute()
         upserted += len(batch)
 
-    matched = sum(1 for r in rows_to_upsert if r["ria_crd"])
+    matched = sum(1 for r in deduped if r["ria_crd"])
     log.info("Upserted %d rows (%d matched to RIAs)", upserted, matched)
 
     return {
