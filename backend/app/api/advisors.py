@@ -108,7 +108,29 @@ def get_advisors(
         platforms_by_crd.setdefault(crd, []).append(name)
         platform_sources_by_crd.setdefault(crd, {})[name] = src
 
-    # ── 4. Fetch recent allocation counts ─────────────────────────────
+    # ── 4. Fetch 13F BDC holdings matched to these RIAs ───────────────
+    try:
+        thirteenf_rows = (
+            db.table("thirteenf_holdings")
+            .select("ria_crd, value_usd, period_of_report")
+            .in_("ria_crd", crd_set[:500])
+            .execute()
+            .data or []
+        ) if crd_set else []
+    except Exception:
+        thirteenf_rows = []  # table may not exist until migration runs
+    # Aggregate total BDC value per CRD, keep latest period
+    thirteenf_by_crd: dict[str, dict] = {}
+    for tf in thirteenf_rows:
+        crd = tf.get("ria_crd") or ""
+        val = tf.get("value_usd") or 0
+        period = tf.get("period_of_report") or ""
+        if crd not in thirteenf_by_crd or period > thirteenf_by_crd[crd]["period"]:
+            thirteenf_by_crd[crd] = {"value_usd": val, "period": period}
+        else:
+            thirteenf_by_crd[crd]["value_usd"] += val
+
+    # ── 5. Fetch recent allocation counts ─────────────────────────────
     cutoff = (date.today() - timedelta(days=90)).isoformat()
     ria_ids = [r["id"] for r in ria_rows]
     alloc_rows = (
@@ -124,7 +146,7 @@ def get_advisors(
         rid = a["ria_id"]
         alloc_count_by_id[rid] = alloc_count_by_id.get(rid, 0) + 1
 
-    # ── 5. Score and assemble ─────────────────────────────────────────
+    # ── 6. Score and assemble ─────────────────────────────────────────
     advisors = []
     for r in ria_rows:
         crd = r.get("crd_number") or ""
@@ -134,12 +156,16 @@ def get_advisors(
         platform_list = sorted(set(platforms_by_crd.get(crd, [])))
         platform_sources = platform_sources_by_crd.get(crd, {})
         allocation_count = alloc_count_by_id.get(ria_id, 0)
+        tf_data = thirteenf_by_crd.get(crd)
+        thirteenf_value = tf_data["value_usd"] if tf_data else None
+        thirteenf_period = tf_data["period"] if tf_data else None
 
         score = (
             len(platform_list) * 3
             + (2 if private_fund_aum and private_fund_aum >= 1e8 else 0)
             + _aum_pts(aum) * 2
             + allocation_count * 4
+            + (3 if thirteenf_value and thirteenf_value >= 1e8 else 1 if thirteenf_value else 0)
         )
 
         advisors.append({
@@ -157,6 +183,8 @@ def get_advisors(
             "platform_sources": platform_sources,  # {platform: "csv"|"adv_brochure"|"edgar_inferred"}
             "platform_count": len(platform_list),
             "allocation_count_90d": allocation_count,
+            "thirteenf_bdc_value_usd": thirteenf_value,
+            "thirteenf_period": thirteenf_period,
             "activity_score": round(score, 2),
         })
 
