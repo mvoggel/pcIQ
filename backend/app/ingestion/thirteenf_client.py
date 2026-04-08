@@ -76,10 +76,20 @@ async def _get(client: httpx.AsyncClient, url: str, params: dict | None = None) 
     return resp.json()
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+_MAX_XML_BYTES = 20 * 1024 * 1024  # 20 MB — skip monster filings
+
+
+@retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=2, max=8))
 async def _get_text(client: httpx.AsyncClient, url: str) -> str:
-    resp = await client.get(url, headers={**_headers(), "Accept": "text/xml,application/xml,*/*"}, timeout=30)
+    resp = await client.get(
+        url,
+        headers={**_headers(), "Accept": "text/xml,application/xml,*/*"},
+        timeout=20,
+    )
     resp.raise_for_status()
+    if len(resp.content) > _MAX_XML_BYTES:
+        log.debug("Skipping oversized XML (%d bytes): %s", len(resp.content), url)
+        raise ValueError(f"XML too large ({len(resp.content)} bytes)")
     await asyncio.sleep(_DELAY)
     return resp.text
 
@@ -244,26 +254,36 @@ async def fetch_13f_holdings(cik: str, accession_no: str, doc_name: str = "") ->
     base     = f"{EDGAR_BASE}/Archives/edgar/data/{path_cik}/{acc_path}"
 
     async with httpx.AsyncClient() as client:
-        # Step 1: build candidate list — EFTS doc first, then index lookup, then fallbacks
+        # When doc_name comes from a CUSIP search, EFTS gives us the exact
+        # infotable filename — try it first without any index round-trip.
+        # Only fall back to index + hardcoded names if that fails.
         candidates: list[str] = []
         if doc_name:
             candidates.append(doc_name)
-        index_names = await _fetch_filing_index(client, path_cik, acc_path, accession_no)
-        for n in index_names:
-            if n not in candidates:
-                candidates.append(n)
         for n in _FALLBACK_XML_NAMES:
             if n not in candidates:
                 candidates.append(n)
 
-        # Step 2: try each candidate until we get a parseable infotable
         for fname in candidates:
             try:
                 xml_text = await _get_text(client, f"{base}/{fname}")
             except Exception:
                 continue
             holdings = _parse_infotable(xml_text)
-            if holdings is not None:  # None = parse error; [] = no BDC match (still valid)
+            if holdings is not None:
+                return holdings
+
+        # Last resort: index lookup (costs an extra HTTP round-trip)
+        index_names = await _fetch_filing_index(client, path_cik, acc_path, accession_no)
+        for fname in index_names:
+            if fname in candidates:
+                continue
+            try:
+                xml_text = await _get_text(client, f"{base}/{fname}")
+            except Exception:
+                continue
+            holdings = _parse_infotable(xml_text)
+            if holdings is not None:
                 return holdings
 
     return []

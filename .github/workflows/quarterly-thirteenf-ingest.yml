@@ -26,7 +26,7 @@ jobs:
           MAX_FILERS="${{ github.event.inputs.max_filers || '500' }}"
           echo "Triggering 13F ingestion: last ${DAYS} days, max ${MAX_FILERS} filers..."
           response=$(curl -s -o body.json -w "%{http_code}" \
-            --max-time 600 \
+            --max-time 1800 \
             -X POST \
             -H "Authorization: Bearer ${{ secrets.INGEST_SECRET }}" \
             "https://pciq-production.up.railway.app/api/thirteenf/trigger?days=${DAYS}&max_filers=${MAX_FILERS}")

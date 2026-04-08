@@ -33,7 +33,7 @@ def len_bdc_cusips() -> int:
 log = logging.getLogger(__name__)
 
 # Throttle concurrent filing fetches to avoid hammering SEC
-_CONCURRENCY = 5
+_CONCURRENCY = 10
 
 
 def _normalize(name: str) -> str:
