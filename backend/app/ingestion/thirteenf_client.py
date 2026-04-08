@@ -84,84 +84,106 @@ async def _get_text(client: httpx.AsyncClient, url: str) -> str:
     return resp.text
 
 
-async def search_13f_filings(
+def _parse_efts_hit(hit: dict) -> dict:
+    """Extract filing metadata from a single EFTS hit dict."""
+    src     = hit.get("_source", {})
+    ciks    = src.get("ciks", [])
+    cik     = ciks[0] if ciks else ""
+    file_id = hit.get("_id", "")  # format: "{accession_no}:{filename}"
+
+    acc_no   = ""
+    doc_name = ""
+    if ":" in file_id:
+        parts    = file_id.split(":", 1)
+        acc_no   = parts[0]
+        doc_name = parts[1]
+    elif "/" in file_id:
+        fname = file_id.split("/")[-1]
+        for ext in (".txt", ".htm", ".html", ".xml"):
+            if fname.lower().endswith(ext):
+                fname = fname[:-len(ext)]
+                break
+        if fname.count("-") == 2:
+            acc_no = fname
+
+    entity_name = src.get("entity_name", "")
+    if not entity_name:
+        display = src.get("display_names", [])
+        if display and isinstance(display[0], dict):
+            entity_name = display[0].get("name", "")
+        elif display and isinstance(display[0], str):
+            entity_name = display[0]
+
+    return {
+        "entity_name":      entity_name,
+        "cik":              cik,
+        "accession_no":     acc_no,
+        "doc_name":         doc_name,
+        "filed_at":         src.get("file_date", ""),
+        "period_of_report": src.get("period_of_report", ""),
+        "_raw_id":          file_id,
+    }
+
+
+async def search_13f_by_cusips(
     start_date: date,
     end_date: date,
     *,
-    max_results: int = 500,
+    max_per_cusip: int = 200,
 ) -> list[dict]:
     """
-    Search EDGAR for 13F-HR filings in a date range.
+    Search EDGAR for 13F-HR filings that mention our tracked BDC CUSIPs.
 
-    Returns list of dicts: {entity_name, cik, accession_no, filed_at, period_of_report}
+    Searching by CUSIP means EFTS returns the exact infotable file (not the
+    cover sheet), so doc_name is correct and we skip the index-lookup step.
+
+    Returns deduplicated list of filing dicts, one per unique accession number.
     """
-    url = f"{EFTS_BASE}/LATEST/search-index"
-    results: list[dict] = []
-    from_offset = 0
-    page_size = 100
+    url  = f"{EFTS_BASE}/LATEST/search-index"
+    seen: dict[str, dict] = {}   # accession_no → filing dict
 
     async with httpx.AsyncClient() as client:
-        while len(results) < max_results:
-            params = {
-                "forms":     "13F-HR",
-                "dateRange": "custom",
-                "startdt":   start_date.isoformat(),
-                "enddt":     end_date.isoformat(),
-                "from":      from_offset,
-            }
-            data = await _get(client, url, params)
-            hits = data.get("hits", {}).get("hits", [])
-            if not hits:
-                break
+        for cusip in BDC_CUSIPS:
+            from_offset = 0
+            page_size   = 100
+            fetched     = 0
 
-            for hit in hits:
-                src     = hit.get("_source", {})
-                ciks    = src.get("ciks", [])
-                cik     = ciks[0] if ciks else ""
-                file_id = hit.get("_id", "")  # format: "{accession_no}:{filename}"
+            while fetched < max_per_cusip:
+                params = {
+                    "q":         f'"{cusip}"',
+                    "forms":     "13F-HR",
+                    "dateRange": "custom",
+                    "startdt":   start_date.isoformat(),
+                    "enddt":     end_date.isoformat(),
+                    "from":      from_offset,
+                }
+                try:
+                    data = await _get(client, url, params)
+                except Exception as exc:
+                    log.warning("EFTS search failed for CUSIP %s: %s", cusip, exc)
+                    break
 
-                # 13F EFTS _id format: "0001234567-26-000001:primary_doc.xml"
-                acc_no   = ""
-                doc_name = ""
-                if ":" in file_id:
-                    parts    = file_id.split(":", 1)
-                    acc_no   = parts[0]   # "0001234567-26-000001"
-                    doc_name = parts[1]   # "primary_doc.xml"
-                elif "/" in file_id:
-                    # Fallback: old path-style _id (Form D style)
-                    fname = file_id.split("/")[-1]
-                    for ext in (".txt", ".htm", ".html", ".xml"):
-                        if fname.lower().endswith(ext):
-                            fname = fname[:-len(ext)]
-                            break
-                    if fname.count("-") == 2:
-                        acc_no = fname
+                hits = data.get("hits", {}).get("hits", [])
+                if not hits:
+                    break
 
-                # 13F filings use display_names, not entity_name
-                entity_name = src.get("entity_name", "")
-                if not entity_name:
-                    display = src.get("display_names", [])
-                    if display and isinstance(display[0], dict):
-                        entity_name = display[0].get("name", "")
-                    elif display and isinstance(display[0], str):
-                        entity_name = display[0]
+                for hit in hits:
+                    filing = _parse_efts_hit(hit)
+                    acc    = filing["accession_no"]
+                    if acc and acc not in seen:
+                        seen[acc] = filing
 
-                results.append({
-                    "entity_name":      entity_name,
-                    "cik":              cik,
-                    "accession_no":     acc_no,
-                    "doc_name":         doc_name,   # filename from _id — use directly
-                    "filed_at":         src.get("file_date", ""),
-                    "period_of_report": src.get("period_of_report", ""),
-                    "_raw_id":          file_id,
-                })
+                total       = data.get("hits", {}).get("total", {}).get("value", 0)
+                fetched    += len(hits)
+                from_offset += page_size
+                if from_offset >= min(total, max_per_cusip):
+                    break
 
-            total       = data.get("hits", {}).get("total", {}).get("value", 0)
-            from_offset += page_size
-            if from_offset >= min(total, max_results):
-                break
+            log.info("CUSIP %s: found %d total filings", cusip, fetched)
 
-    return results[:max_results]
+    results = list(seen.values())
+    log.info("Total unique 13F filers holding tracked BDCs: %d", len(results))
+    return results
 
 
 # Common infotable filenames used by 13F filers — tried if index lookup fails

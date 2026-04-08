@@ -21,9 +21,14 @@ from datetime import date, timedelta
 
 from app.db.client import get_db
 from app.ingestion.thirteenf_client import (
+    BDC_CUSIPS,
     fetch_13f_holdings,
-    search_13f_filings,
+    search_13f_by_cusips,
 )
+
+
+def len_bdc_cusips() -> int:
+    return max(1, len(BDC_CUSIPS))
 
 log = logging.getLogger(__name__)
 
@@ -84,9 +89,12 @@ async def run(
     ria_index = _build_ria_index(ria_rows)
     log.info("Loaded %d RIAs for name matching", len(ria_index))
 
-    # ── 2. Search for 13F-HR filings in range ─────────────────────────
-    filings = await search_13f_filings(start_date, end_date, max_results=max_filers)
-    log.info("Found %d 13F-HR filings", len(filings))
+    # ── 2. Search for 13F-HR filings containing our BDC CUSIPs ────────
+    # max_filers controls max results per CUSIP (10 CUSIPs × max = total ceiling)
+    filings = await search_13f_by_cusips(
+        start_date, end_date, max_per_cusip=max(50, max_filers // len_bdc_cusips())
+    )
+    log.info("Found %d unique 13F filers holding tracked BDCs", len(filings))
 
     # Debug: capture first 3 raw filings so we can inspect cik/acc_no/raw_id
     debug_sample = [
