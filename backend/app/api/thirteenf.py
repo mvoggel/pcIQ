@@ -2,13 +2,13 @@
 /api/thirteenf — 13F holdings ingestion trigger and query endpoints.
 
 Endpoints:
-  POST /api/thirteenf/trigger   — kick off background ingestion (protected)
+  POST /api/thirteenf/trigger   — run ingestion synchronously (protected)
   GET  /api/thirteenf/holders   — top firms holding BDC positions
 """
 
 from datetime import date, timedelta
 
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 
 from app.config import settings
 from app.db.client import get_db
@@ -26,14 +26,13 @@ def _check_token(authorization: str | None) -> None:
 
 @router.post("/trigger")
 async def trigger_thirteenf(
-    background_tasks: BackgroundTasks,
     days: int = Query(default=100, ge=1, le=365),
     max_filers: int = Query(default=500, ge=1, le=2000),
     authorization: str | None = Header(default=None),
 ) -> dict:
     """
-    Trigger 13F ingestion for the last `days` days (default 100 ≈ one quarter).
-    Runs in the background — returns immediately.
+    Run 13F ingestion synchronously — waits for completion and returns results.
+    Runs in-process so Railway doesn't scale down mid-run.
     Protected by the same INGEST_SECRET as Form D ingestion.
     """
     _check_token(authorization)
@@ -41,18 +40,10 @@ async def trigger_thirteenf(
     end   = date.today()
     start = end - timedelta(days=days)
 
-    async def _run() -> None:
-        await run_thirteenf(start, end, max_filers=max_filers)
-
     background_tasks.add_task(_run)
 
-    return {
-        "status":      "started",
-        "start":       str(start),
-        "end":         str(end),
-        "days":        days,
-        "max_filers":  max_filers,
-    }
+    result = await run_thirteenf(start, end, max_filers=max_filers)
+    return {"status": "completed", "start": str(start), "end": str(end), **result}
 
 
 @router.get("/holders")

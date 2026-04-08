@@ -25,10 +25,12 @@ jobs:
           DAYS="${{ github.event.inputs.days || '100' }}"
           MAX_FILERS="${{ github.event.inputs.max_filers || '500' }}"
           echo "Triggering 13F ingestion: last ${DAYS} days, max ${MAX_FILERS} filers..."
-          response=$(curl -s -o /dev/null -w "%{http_code}" \
+          response=$(curl -s -o body.json -w "%{http_code}" \
+            --max-time 600 \
             -X POST \
             -H "Authorization: Bearer ${{ secrets.INGEST_SECRET }}" \
             "https://pciq-production.up.railway.app/api/thirteenf/trigger?days=${DAYS}&max_filers=${MAX_FILERS}")
+          cat body.json
           echo "HTTP status: $response"
           if [ "$response" != "200" ]; then
             echo "13F ingestion trigger failed with status $response"
