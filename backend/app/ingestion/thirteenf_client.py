@@ -115,31 +115,45 @@ async def search_13f_filings(
                 break
 
             for hit in hits:
-                src = hit.get("_source", {})
-                ciks = src.get("ciks", [])
-                cik  = ciks[0] if ciks else ""
-                file_id = hit.get("_id", "")
+                src     = hit.get("_source", {})
+                ciks    = src.get("ciks", [])
+                cik     = ciks[0] if ciks else ""
+                file_id = hit.get("_id", "")  # format: "{accession_no}:{filename}"
 
-                # Try multiple strategies to extract the accession number
-                acc_no = src.get("accession_no", "")  # direct field (some EFTS responses)
-                if not acc_no and "/" in file_id:
+                # 13F EFTS _id format: "0001234567-26-000001:primary_doc.xml"
+                acc_no   = ""
+                doc_name = ""
+                if ":" in file_id:
+                    parts    = file_id.split(":", 1)
+                    acc_no   = parts[0]   # "0001234567-26-000001"
+                    doc_name = parts[1]   # "primary_doc.xml"
+                elif "/" in file_id:
+                    # Fallback: old path-style _id (Form D style)
                     fname = file_id.split("/")[-1]
-                    # Strip known extensions
                     for ext in (".txt", ".htm", ".html", ".xml"):
                         if fname.lower().endswith(ext):
-                            fname = fname[: -len(ext)]
+                            fname = fname[:-len(ext)]
                             break
-                    # Looks like an accession number if it has two hyphens
                     if fname.count("-") == 2:
                         acc_no = fname
 
+                # 13F filings use display_names, not entity_name
+                entity_name = src.get("entity_name", "")
+                if not entity_name:
+                    display = src.get("display_names", [])
+                    if display and isinstance(display[0], dict):
+                        entity_name = display[0].get("name", "")
+                    elif display and isinstance(display[0], str):
+                        entity_name = display[0]
+
                 results.append({
-                    "entity_name":      src.get("entity_name", ""),
+                    "entity_name":      entity_name,
                     "cik":              cik,
                     "accession_no":     acc_no,
+                    "doc_name":         doc_name,   # filename from _id — use directly
                     "filed_at":         src.get("file_date", ""),
                     "period_of_report": src.get("period_of_report", ""),
-                    "_raw_id":          file_id,   # kept for debug; stripped before upsert
+                    "_raw_id":          file_id,
                 })
 
             total       = data.get("hits", {}).get("total", {}).get("value", 0)
@@ -190,28 +204,37 @@ async def _fetch_filing_index(
         return _FALLBACK_XML_NAMES
 
 
-async def fetch_13f_holdings(cik: str, accession_no: str) -> list[dict]:
+async def fetch_13f_holdings(cik: str, accession_no: str, doc_name: str = "") -> list[dict]:
     """
     Fetch and parse the infotable XML for a 13F-HR filing.
 
-    Fetches the filing index first to find the correct XML document name,
-    then parses it for BDC holdings.
+    doc_name: filename extracted from EFTS _id (e.g. "primary_doc.xml") — tried first.
+    Falls back to filing index lookup, then common hardcoded filenames.
 
     Returns list of dicts: {issuer_name, cusip, ticker, value_usd, shares, investment_discretion}
     value_usd is in whole dollars (13F reports in thousands — multiplied by 1000).
     """
     acc_path = accession_no.replace("-", "")
     cik_str  = cik.lstrip("0")
+    base     = f"{EDGAR_BASE}/Archives/edgar/data/{cik_str}/{acc_path}"
 
     async with httpx.AsyncClient() as client:
-        # Step 1: get the filing index to find the correct XML filename
-        xml_files = await _fetch_filing_index(client, cik_str, acc_path, accession_no)
+        # Step 1: build candidate list — EFTS doc first, then index lookup, then fallbacks
+        candidates: list[str] = []
+        if doc_name:
+            candidates.append(doc_name)
+        index_names = await _fetch_filing_index(client, cik_str, acc_path, accession_no)
+        for n in index_names:
+            if n not in candidates:
+                candidates.append(n)
+        for n in _FALLBACK_XML_NAMES:
+            if n not in candidates:
+                candidates.append(n)
 
-        # Step 2: try each XML file until we find one with infoTable elements
-        for fname in xml_files:
-            url = f"{EDGAR_BASE}/Archives/edgar/data/{cik_str}/{acc_path}/{fname}"
+        # Step 2: try each candidate until we get a parseable infotable
+        for fname in candidates:
             try:
-                xml_text = await _get_text(client, url)
+                xml_text = await _get_text(client, f"{base}/{fname}")
             except Exception:
                 continue
             holdings = _parse_infotable(xml_text)

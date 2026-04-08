@@ -101,18 +101,19 @@ async def run(
 
     async def _process(filing: dict) -> None:
         nonlocal filers_with_bdc
-        cik       = filing["cik"]
-        acc       = filing["accession_no"]
-        name      = filing["entity_name"]
-        period    = filing.get("period_of_report") or filing.get("filed_at") or ""
-        filed_at  = filing.get("filed_at") or ""
+        cik      = filing["cik"]
+        acc      = filing["accession_no"]
+        doc_name = filing.get("doc_name", "")
+        name     = filing["entity_name"]
+        period   = filing.get("period_of_report") or filing.get("filed_at") or ""
+        filed_at = filing.get("filed_at") or ""
 
         if not cik or not acc:
             return
 
         async with sem:
             try:
-                holdings = await fetch_13f_holdings(cik, acc)
+                holdings = await fetch_13f_holdings(cik, acc, doc_name=doc_name)
             except Exception as exc:
                 log.warning("Failed to fetch %s / %s: %s", cik, acc, exc)
                 return
