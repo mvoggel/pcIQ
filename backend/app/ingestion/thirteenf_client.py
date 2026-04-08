@@ -287,6 +287,12 @@ async def fetch_13f_holdings(cik: str, accession_no: str, doc_name: str = "") ->
     return []
 
 
+def _tag(el: ET.Element) -> str:
+    """Strip XML namespace prefix: {http://...}infoTable → infoTable."""
+    tag = el.tag
+    return tag.split("}")[-1] if "}" in tag else tag
+
+
 def _parse_infotable(xml_text: str) -> list[dict] | None:
     """
     Parse 13F infotable XML and return only BDC-related holdings.
@@ -308,11 +314,6 @@ def _parse_infotable(xml_text: str) -> list[dict] | None:
     has_infotable = any(_tag(el) == "infoTable" for el in root.iter())
     if not has_infotable:
         return None
-
-    # Strip namespace prefix if present (e.g. {http://...}infoTable → infoTable)
-    def _tag(el: ET.Element) -> str:
-        tag = el.tag
-        return tag.split("}")[-1] if "}" in tag else tag
 
     holdings: list[dict] = []
     for entry in root.iter():
