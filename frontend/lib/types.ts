@@ -110,6 +110,8 @@ export interface AdvisorProfile {
   platform_count: number;
   allocation_count_90d: number;
   activity_score: number;
+  thirteenf_bdc_value_usd: number | null;   // total $ held in BDC positions per latest 13F
+  thirteenf_period: string | null;           // e.g. "2024-12-31"
 }
 
 export interface AdvisorsResponse {

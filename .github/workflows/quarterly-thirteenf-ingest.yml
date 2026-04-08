@@ -1,0 +1,37 @@
+name: 13F holdings ingestion
+
+on:
+  schedule:
+    # Quarterly: run ~2 weeks after each 13F filing deadline
+    # 13F deadlines: Feb 14, May 15, Aug 14, Nov 14 → we run on the 28th of those months
+    - cron: "0 14 28 2,5,8,11 *"   # 10am ET on Feb/May/Aug/Nov 28
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Days to look back for 13F filings (default 100 ≈ one quarter)"
+        default: "100"
+        required: false
+      max_filers:
+        description: "Max number of 13F filers to process"
+        default: "500"
+        required: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger 13F ingestion
+        run: |
+          DAYS="${{ github.event.inputs.days || '100' }}"
+          MAX_FILERS="${{ github.event.inputs.max_filers || '500' }}"
+          echo "Triggering 13F ingestion: last ${DAYS} days, max ${MAX_FILERS} filers..."
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.INGEST_SECRET }}" \
+            "https://pciq-production.up.railway.app/api/thirteenf/trigger?days=${DAYS}&max_filers=${MAX_FILERS}")
+          echo "HTTP status: $response"
+          if [ "$response" != "200" ]; then
+            echo "13F ingestion trigger failed with status $response"
+            exit 1
+          fi
+          echo "13F ingestion started successfully."

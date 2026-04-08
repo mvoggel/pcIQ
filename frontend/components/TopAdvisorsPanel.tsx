@@ -100,6 +100,18 @@ function headcountSignal(a: AdvisorProfile): Signal | null {
   return { bullet, strength: "confirmed", source: "Form ADV (IAPD)" };
 }
 
+function thirteenFSignal(a: AdvisorProfile): Signal | null {
+  if (!a.thirteenf_bdc_value_usd || a.thirteenf_bdc_value_usd <= 0) return null;
+  const val = a.thirteenf_bdc_value_usd;
+  const period = a.thirteenf_period ? ` (${a.thirteenf_period.slice(0, 7)})` : "";
+  const fmt = val >= 1e9 ? `$${(val / 1e9).toFixed(1)}B` : `$${Math.round(val / 1e6)}M`;
+  const bullet =
+    val >= 5e8 ? `${fmt} in BDC positions per 13F filing${period} — institutional-scale buyer of this asset class`
+    : val >= 1e8 ? `${fmt} in BDC holdings per 13F filing${period} — established alternative credit allocator`
+    : `${fmt} in BDC positions per 13F filing${period}`;
+  return { bullet, strength: "confirmed", source: "SEC Form 13F" };
+}
+
 // Future hooks — uncomment and fill in when data source is wired:
 // function crmEmailSignal(a: AdvisorProfile): Signal | null { ... }
 // function priorCionAllocationSignal(a: AdvisorProfile): Signal | null { ... }
@@ -107,6 +119,7 @@ function headcountSignal(a: AdvisorProfile): Signal | null {
 
 function buildSignals(a: AdvisorProfile): Signal[] {
   return [
+    thirteenFSignal(a),
     allocationSignal(a),
     platformSignal(a),
     privateFundAumSignal(a),
@@ -115,12 +128,13 @@ function buildSignals(a: AdvisorProfile): Signal[] {
   ].filter((s): s is Signal => s !== null).slice(0, 4);
 }
 
-function getConfidence(signals: Signal[]): { label: string; dotColor: string } {
-  if (signals.length === 0) return { label: "Limited data", dotColor: "bg-slate-400" };
+function getConfidence(signals: Signal[], advisor: AdvisorProfile): { label: string; dotColor: string } {
+  const bigAum   = advisor.aum_tier === "mega" || advisor.aum_tier === "large";
+  const multiPlat = advisor.platform_count >= 2;
   const confirmed = signals.filter((s) => s.strength === "confirmed").length;
-  if (confirmed >= 2) return { label: "Strong signal",    dotColor: "bg-emerald-400" };
-  if (confirmed >= 1) return { label: "Emerging signal",  dotColor: "bg-blue-400" };
-  return                      { label: "Limited data",    dotColor: "bg-slate-400" };
+  if (confirmed >= 2 || (bigAum && multiPlat)) return { label: "Strong signal",   dotColor: "bg-emerald-400" };
+  if (confirmed >= 1 || bigAum || multiPlat)   return { label: "Emerging signal", dotColor: "bg-blue-400" };
+  return                                               { label: "Limited data",    dotColor: "bg-slate-400" };
 }
 
 // ── Priority — on dark header backgrounds ─────────────────────────────────────
@@ -141,7 +155,7 @@ function getPriority(a: AdvisorProfile): Priority {
   const bigAum          = a.aum_tier === "mega" || a.aum_tier === "large";
   const hasConfirmedPlat = Object.values(a.platform_sources ?? {}).some((s) => s === "csv");
 
-  if ((hasDeals && (multiPlat || bigAum)) || (hasConfirmedPlat && (hasDeals || bigAum))) {
+  if ((hasDeals && (multiPlat || bigAum)) || (hasConfirmedPlat && (hasDeals || bigAum)) || (bigAum && multiPlat)) {
     return { label: "High Priority", emoji: "🔥", darkBadge: "bg-red-500/20 text-red-300 border-red-500/40",  rankBg: "bg-red-500" };
   }
   if (hasDeals || multiPlat || (onePlat && bigAum) || hasConfirmedPlat) {
@@ -153,12 +167,12 @@ function getPriority(a: AdvisorProfile): Priority {
 function getOutcomeAnchor(a: AdvisorProfile, signals: Signal[]): string | null {
   const hasDeals  = a.allocation_count_90d > 0;
   const multiPlat = a.platform_count >= 2;
-  if (hasDeals && multiPlat)    return "Active buying behavior + multi-platform presence → strong fit for current raise";
+  if (hasDeals && multiPlat)    return "Active buying behavior across multiple channels → strong fit for current raise";
   if (hasDeals)                 return "Recent allocation activity + confirmed channel access → worth a call this week";
   if (multiPlat && (a.aum_tier === "mega" || a.aum_tier === "large"))
-                                return "Institutional buyer across multiple channels → positioned to allocate at scale";
+                                return "Institutional scale + active in alternative credit channels → positioned to allocate at scale";
   if (a.platform_count > 0 && (a.aum_tier === "mega" || a.aum_tier === "large"))
-                                return "Large AUM + platform access → capacity and channel confirmed";
+                                return "Large AUM + alternative credit allocation history → capacity and channel confirmed";
   if (signals.length >= 3)      return "Multiple data points align → high confidence on fit";
   return null;
 }
@@ -175,7 +189,7 @@ function AccordionItem({
 }) {
   const priority   = getPriority(advisor);
   const signals    = buildSignals(advisor);
-  const confidence = getConfidence(signals);
+  const confidence = getConfidence(signals, advisor);
   const anchor     = getOutcomeAnchor(advisor, signals);
 
   return (
@@ -295,7 +309,7 @@ export default function TopAdvisorsPanel({ advisors, territory }: Props) {
           <p className="text-xs text-slate-400 mt-0.5">
             {highCount > 0
               ? `${highCount} high-priority firm${highCount > 1 ? "s" : ""} showing active buying signals`
-              : "Ranked by platform presence, AUM, and recent allocation activity"}
+              : "Ranked by alternative credit allocation signals, AUM, and broker-dealer activity"}
             {territory && territory !== "All" ? ` · ${territory}` : ""}
           </p>
         </div>
