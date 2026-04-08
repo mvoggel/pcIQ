@@ -138,50 +138,72 @@ async def search_13f_filings(
     return results[:max_results]
 
 
+async def _fetch_filing_index(client: httpx.AsyncClient, cik_str: str, acc_path: str, accession_no: str) -> list[str]:
+    """
+    Fetch the filing index JSON and return a list of XML document filenames
+    that are likely to contain the infotable (sorted: infotable candidates first).
+    """
+    index_url = f"{EDGAR_BASE}/Archives/edgar/data/{cik_str}/{acc_path}/{accession_no}-index.json"
+    try:
+        data = await _get(client, index_url)
+        items = data.get("directory", {}).get("item", [])
+        xml_files = [
+            item["name"] for item in items
+            if isinstance(item, dict) and item.get("name", "").lower().endswith(".xml")
+        ]
+        # Prioritize files with "infotable" or "13f" in the name
+        xml_files.sort(key=lambda n: (
+            0 if "infotable" in n.lower() else
+            1 if "13f" in n.lower() else
+            2
+        ))
+        return xml_files
+    except Exception:
+        return []
+
+
 async def fetch_13f_holdings(cik: str, accession_no: str) -> list[dict]:
     """
     Fetch and parse the infotable XML for a 13F-HR filing.
 
-    Returns list of dicts for each holding line that matches a BDC issuer:
-      {issuer_name, cusip, ticker, value_usd, shares, investment_discretion}
+    Fetches the filing index first to find the correct XML document name,
+    then parses it for BDC holdings.
 
-    value_usd is in whole dollars (13F reports in thousands — we multiply by 1000).
-    Returns empty list if the filing has no BDC holdings or cannot be fetched.
+    Returns list of dicts: {issuer_name, cusip, ticker, value_usd, shares, investment_discretion}
+    value_usd is in whole dollars (13F reports in thousands — multiplied by 1000).
     """
     acc_path = accession_no.replace("-", "")
     cik_str  = cik.lstrip("0")
 
-    # Try the standard infotable location; fall back to primary_doc.xml
-    candidate_urls = [
-        f"{EDGAR_BASE}/Archives/edgar/data/{cik_str}/{acc_path}/infotable.xml",
-        f"{EDGAR_BASE}/Archives/edgar/data/{cik_str}/{acc_path}/primary_doc.xml",
-    ]
-
-    xml_text: str | None = None
     async with httpx.AsyncClient() as client:
-        for url in candidate_urls:
+        # Step 1: get the filing index to find the correct XML filename
+        xml_files = await _fetch_filing_index(client, cik_str, acc_path, accession_no)
+
+        # Step 2: try each XML file until we find one with infoTable elements
+        for fname in xml_files:
+            url = f"{EDGAR_BASE}/Archives/edgar/data/{cik_str}/{acc_path}/{fname}"
             try:
                 xml_text = await _get_text(client, url)
-                break
             except Exception:
                 continue
+            holdings = _parse_infotable(xml_text)
+            if holdings is not None:  # None = parse error; [] = no BDC match (still valid)
+                return holdings
 
-    if not xml_text:
-        return []
-
-    return _parse_infotable(xml_text)
+    return []
 
 
-def _parse_infotable(xml_text: str) -> list[dict]:
+def _parse_infotable(xml_text: str) -> list[dict] | None:
     """
     Parse 13F infotable XML and return only BDC-related holdings.
-
+    Returns None on parse error (so caller can try the next file).
+    Returns [] if the file is valid but contains no BDC holdings.
     Handles both namespaced and non-namespaced variants of the schema.
     """
     try:
         root = ET.fromstring(xml_text)
     except ET.ParseError:
-        return []
+        return None
 
     # Strip namespace prefix if present (e.g. {http://...}infoTable → infoTable)
     def _tag(el: ET.Element) -> str:
