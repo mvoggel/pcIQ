@@ -40,8 +40,6 @@ async def trigger_thirteenf(
     end   = date.today()
     start = end - timedelta(days=days)
 
-    background_tasks.add_task(_run)
-
     result = await run_thirteenf(start, end, max_filers=max_filers)
     return {"status": "completed", "start": str(start), "end": str(end), **result}
 
