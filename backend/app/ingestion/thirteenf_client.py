@@ -24,6 +24,7 @@ BDC CUSIPs tracked (add more as needed):
 """
 
 import asyncio
+import logging
 import xml.etree.ElementTree as ET
 from datetime import date
 
@@ -31,6 +32,8 @@ import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.config import settings
+
+log = logging.getLogger(__name__)
 
 EDGAR_BASE = "https://www.sec.gov"
 EFTS_BASE  = "https://efts.sec.gov"
@@ -122,6 +125,8 @@ async def search_13f_filings(
                     fname = file_id.split("/")[-1]
                     if fname.endswith(".txt"):
                         acc_no = fname[:-4]  # strip .txt → "0001234567-25-000001"
+                if len(results) < 3:
+                    log.info("Sample EFTS hit: cik=%r acc_no=%r file_id=%r", cik, acc_no, file_id)
                 results.append({
                     "entity_name":     src.get("entity_name", ""),
                     "cik":             cik,
@@ -138,28 +143,44 @@ async def search_13f_filings(
     return results[:max_results]
 
 
-async def _fetch_filing_index(client: httpx.AsyncClient, cik_str: str, acc_path: str, accession_no: str) -> list[str]:
+# Common infotable filenames used by 13F filers — tried if index lookup fails
+_FALLBACK_XML_NAMES = [
+    "form13fInfoTable.xml",
+    "informationtable.xml",
+    "infotable.xml",
+    "13fInfoTable.xml",
+    "primary_doc.xml",
+]
+
+
+async def _fetch_filing_index(
+    client: httpx.AsyncClient, cik_str: str, acc_path: str, accession_no: str
+) -> list[str]:
     """
-    Fetch the filing index JSON and return a list of XML document filenames
-    that are likely to contain the infotable (sorted: infotable candidates first).
+    Fetch the filing index JSON and return XML filenames sorted: infotable first.
+    Falls back to common known filenames if the index is unavailable.
     """
     index_url = f"{EDGAR_BASE}/Archives/edgar/data/{cik_str}/{acc_path}/{accession_no}-index.json"
     try:
         data = await _get(client, index_url)
         items = data.get("directory", {}).get("item", [])
+        if not items:
+            log.debug("Empty index for %s/%s — using fallback names", cik_str, accession_no)
+            return _FALLBACK_XML_NAMES
         xml_files = [
             item["name"] for item in items
             if isinstance(item, dict) and item.get("name", "").lower().endswith(".xml")
         ]
-        # Prioritize files with "infotable" or "13f" in the name
         xml_files.sort(key=lambda n: (
             0 if "infotable" in n.lower() else
             1 if "13f" in n.lower() else
             2
         ))
-        return xml_files
-    except Exception:
-        return []
+        log.debug("Index for %s: %s", accession_no, xml_files)
+        return xml_files or _FALLBACK_XML_NAMES
+    except Exception as exc:
+        log.debug("Index fetch failed for %s/%s: %s — using fallback names", cik_str, accession_no, exc)
+        return _FALLBACK_XML_NAMES
 
 
 async def fetch_13f_holdings(cik: str, accession_no: str) -> list[dict]:
