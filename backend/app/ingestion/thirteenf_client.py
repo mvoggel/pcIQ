@@ -247,13 +247,23 @@ async def fetch_13f_holdings(cik: str, accession_no: str, doc_name: str = "") ->
 def _parse_infotable(xml_text: str) -> list[dict] | None:
     """
     Parse 13F infotable XML and return only BDC-related holdings.
-    Returns None on parse error (so caller can try the next file).
-    Returns [] if the file is valid but contains no BDC holdings.
-    Handles both namespaced and non-namespaced variants of the schema.
+
+    Returns None  → wrong file (no infoTable elements found, or parse error) — try next candidate.
+    Returns []    → right file, but this filer holds none of our tracked BDCs.
+    Returns [...]  → BDC holdings found.
+
+    This distinction matters: primary_doc.xml is the cover sheet and has zero
+    infoTable elements — we must keep trying other files rather than stopping.
     """
     try:
         root = ET.fromstring(xml_text)
     except ET.ParseError:
+        return None
+
+    # Check whether this file contains any infoTable elements at all.
+    # If not, it's the wrong document — tell the caller to try the next one.
+    has_infotable = any(_tag(el) == "infoTable" for el in root.iter())
+    if not has_infotable:
         return None
 
     # Strip namespace prefix if present (e.g. {http://...}infoTable → infoTable)
