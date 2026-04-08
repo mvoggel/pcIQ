@@ -118,21 +118,28 @@ async def search_13f_filings(
                 src = hit.get("_source", {})
                 ciks = src.get("ciks", [])
                 cik  = ciks[0] if ciks else ""
-                # Derive accession number from _id: "edgar/data/{cik}/{acc-with-dashes}.txt"
                 file_id = hit.get("_id", "")
-                acc_no  = ""
-                if "/" in file_id:
+
+                # Try multiple strategies to extract the accession number
+                acc_no = src.get("accession_no", "")  # direct field (some EFTS responses)
+                if not acc_no and "/" in file_id:
                     fname = file_id.split("/")[-1]
-                    if fname.endswith(".txt"):
-                        acc_no = fname[:-4]  # strip .txt → "0001234567-25-000001"
-                if len(results) < 3:
-                    log.info("Sample EFTS hit: cik=%r acc_no=%r file_id=%r", cik, acc_no, file_id)
+                    # Strip known extensions
+                    for ext in (".txt", ".htm", ".html", ".xml"):
+                        if fname.lower().endswith(ext):
+                            fname = fname[: -len(ext)]
+                            break
+                    # Looks like an accession number if it has two hyphens
+                    if fname.count("-") == 2:
+                        acc_no = fname
+
                 results.append({
-                    "entity_name":     src.get("entity_name", ""),
-                    "cik":             cik,
-                    "accession_no":    acc_no,
-                    "filed_at":        src.get("file_date", ""),
+                    "entity_name":      src.get("entity_name", ""),
+                    "cik":              cik,
+                    "accession_no":     acc_no,
+                    "filed_at":         src.get("file_date", ""),
                     "period_of_report": src.get("period_of_report", ""),
+                    "_raw_id":          file_id,   # kept for debug; stripped before upsert
                 })
 
             total       = data.get("hits", {}).get("total", {}).get("value", 0)

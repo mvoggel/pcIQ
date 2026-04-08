@@ -88,6 +88,12 @@ async def run(
     filings = await search_13f_filings(start_date, end_date, max_results=max_filers)
     log.info("Found %d 13F-HR filings", len(filings))
 
+    # Debug: capture first 3 raw filings so we can inspect cik/acc_no/raw_id
+    debug_sample = [
+        {k: v for k, v in f.items()}
+        for f in filings[:3]
+    ]
+
     # ── 3. Fetch holdings concurrently (throttled) ────────────────────
     sem     = asyncio.Semaphore(_CONCURRENCY)
     rows_to_upsert: list[dict] = []
@@ -141,11 +147,12 @@ async def run(
 
     if dry_run or not rows_to_upsert:
         return {
-            "filers_scanned":    len(filings),
+            "filers_scanned":     len(filings),
             "bdc_holdings_found": len(rows_to_upsert),
-            "upserted":          0,
-            "matched_rias":      sum(1 for r in rows_to_upsert if r["ria_crd"]),
-            "dry_run":           dry_run,
+            "upserted":           0,
+            "matched_rias":       sum(1 for r in rows_to_upsert if r["ria_crd"]),
+            "dry_run":            dry_run,
+            "debug_sample":       debug_sample,
         }
 
     # ── 4. Upsert in batches ──────────────────────────────────────────
@@ -168,6 +175,7 @@ async def run(
         "upserted":           upserted,
         "matched_rias":       matched,
         "dry_run":            False,
+        "debug_sample":       debug_sample,
     }
 
 
