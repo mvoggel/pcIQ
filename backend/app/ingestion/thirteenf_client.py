@@ -237,15 +237,18 @@ async def fetch_13f_holdings(cik: str, accession_no: str, doc_name: str = "") ->
     value_usd is in whole dollars (13F reports in thousands — multiplied by 1000).
     """
     acc_path = accession_no.replace("-", "")
-    cik_str  = cik.lstrip("0")
-    base     = f"{EDGAR_BASE}/Archives/edgar/data/{cik_str}/{acc_path}"
+    # EDGAR stores filings under the CIK embedded in the accession number
+    # (the submitter/filer CIK), NOT the entity CIK from the EFTS result.
+    # e.g. accession "0001420506-26-000184" → path CIK "1420506"
+    path_cik = accession_no.split("-")[0].lstrip("0") or cik.lstrip("0")
+    base     = f"{EDGAR_BASE}/Archives/edgar/data/{path_cik}/{acc_path}"
 
     async with httpx.AsyncClient() as client:
         # Step 1: build candidate list — EFTS doc first, then index lookup, then fallbacks
         candidates: list[str] = []
         if doc_name:
             candidates.append(doc_name)
-        index_names = await _fetch_filing_index(client, cik_str, acc_path, accession_no)
+        index_names = await _fetch_filing_index(client, path_cik, acc_path, accession_no)
         for n in index_names:
             if n not in candidates:
                 candidates.append(n)
