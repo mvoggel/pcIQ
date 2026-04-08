@@ -1,4 +1,4 @@
-import { AdvisorsResponse, CionFund, FundEnrichment, SignalsResponse } from "./types";
+import { AdvisorsResponse, CionFund, FundEnrichment, SignalsResponse, ThirteenFHoldersResponse } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -32,6 +32,19 @@ export async function fetchFundDetail(
 ): Promise<FundEnrichment> {
   const url = `${API_BASE}/api/fund/${cik}/${encodeURIComponent(accessionNo)}`;
   const res = await fetch(url, { cache: "no-store", signal });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json();
+}
+
+export async function fetchThirteenFHolders(
+  limit: number = 50,
+  minValueUsd: number = 1_000_000
+): Promise<ThirteenFHoldersResponse> {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    min_value_usd: String(minValueUsd),
+  });
+  const res = await fetch(`${API_BASE}/api/thirteenf/holders?${params}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();
 }

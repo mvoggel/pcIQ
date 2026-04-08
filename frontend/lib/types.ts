@@ -121,6 +121,20 @@ export interface AdvisorsResponse {
   advisors: AdvisorProfile[];
 }
 
+export interface ThirteenFHolder {
+  filer_cik: string;
+  filer_name: string;
+  ria_crd: string | null;
+  period_of_report: string | null;
+  total_bdc_value_usd: number;
+  tickers: string[];
+}
+
+export interface ThirteenFHoldersResponse {
+  total: number;
+  holders: ThirteenFHolder[];
+}
+
 export interface FundEnrichment {
   cik: string;
   accession_no: string;

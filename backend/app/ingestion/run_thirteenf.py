@@ -17,6 +17,7 @@ Usage:
 
 import asyncio
 import logging
+import re
 from datetime import date, timedelta
 
 from app.db.client import get_db
@@ -36,8 +37,19 @@ log = logging.getLogger(__name__)
 _CONCURRENCY = 10
 
 
+def _clean_efts_name(name: str) -> str:
+    """
+    Strip suffixes that EFTS appends to entity names before matching.
+      "Granite FO LLC  (CIK 0002034090)"  →  "Granite FO LLC"
+      "MARKEL GROUP INC.  (MKL)"          →  "MARKEL GROUP INC."
+    """
+    name = re.sub(r"\s*\(CIK\s+\d+\)\s*$", "", name or "").strip()
+    name = re.sub(r"\s*\([A-Z]{1,5}\)\s*$", "", name).strip()
+    return name
+
+
 def _normalize(name: str) -> str:
-    """Lowercase, strip common suffixes for fuzzy matching."""
+    """Strip common legal suffixes for fuzzy firm-name matching."""
     name = name.upper()
     for suffix in (" LLC", " LP", " LLP", " INC", " CORP", " CORPORATION",
                    " CO.", " CO,", " ADVISORS", " ADVISERS", " MANAGEMENT",
@@ -57,8 +69,8 @@ def _build_ria_index(ria_rows: list[dict]) -> dict[str, str]:
 
 
 def _match_crd(entity_name: str, ria_index: dict[str, str]) -> str | None:
-    """Best-effort name match. Returns CRD string or None."""
-    key = _normalize(entity_name)
+    """Best-effort name match after stripping EFTS suffixes. Returns CRD or None."""
+    key = _normalize(_clean_efts_name(entity_name))
     return ria_index.get(key) or None
 
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import AppHeader from "@/components/AppHeader";
 import TopAdvisorsPanel from "@/components/TopAdvisorsPanel";
+import BdcHoldersPanel from "@/components/BdcHoldersPanel";
 import { fetchAdvisors } from "@/lib/api";
 import { AdvisorProfile, AdvisorsResponse } from "@/lib/types";
 
@@ -162,7 +163,7 @@ export default function AdvisorsPage() {
               Advisor Intelligence
             </h1>
             <p className="text-xs text-slate-400 mt-0.5">
-              RIAs ranked by platform presence and allocation activity — who to call first
+              Alternative credit allocation signals — who to call first
             </p>
           </div>
 
@@ -210,6 +211,9 @@ export default function AdvisorsPage() {
             {!query && (
               <TopAdvisorsPanel advisors={data.advisors} territory={data.territory} />
             )}
+
+            {/* 13F BDC Holders panel — always visible, not filtered by territory */}
+            {!query && <BdcHoldersPanel />}
 
             {/* Full list divider */}
             <div className="flex items-center gap-3 mb-3">
