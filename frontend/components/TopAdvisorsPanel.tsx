@@ -26,38 +26,29 @@ interface Signal {
 
 function platformSignal(a: AdvisorProfile): Signal | null {
   if (a.platforms.length === 0) return null;
-  const sources = a.platform_sources ?? {};
-  const confirmed = a.platforms.filter((p) => sources[p] === "csv");
-  const brochure  = a.platforms.filter((p) => sources[p] === "adv_brochure");
-  const inferred  = a.platforms.filter((p) => sources[p] === "edgar_inferred" || !sources[p]);
+  const sources  = a.platform_sources ?? {};
+  const brochure = a.platforms.filter((p) => sources[p] === "adv_brochure");
+  const inferred = a.platforms.filter((p) => sources[p] === "edgar_inferred" || !sources[p]);
 
   let bullet: string;
-  let strength: SignalStrength;
-
-  if (confirmed.length >= 2) {
-    bullet = `Confirmed ${confirmed[0]} and ${confirmed[1]} partner — direct channel overlap`;
-    strength = "confirmed";
-  } else if (confirmed.length === 1 && a.platforms.length >= 2) {
-    const others = a.platforms.filter((p) => p !== confirmed[0]);
-    bullet = `Confirmed ${confirmed[0]} partner; also active on ${others.slice(0, 2).join(" and ")}`;
-    strength = "confirmed";
-  } else if (confirmed.length === 1) {
-    bullet = `Confirmed ${confirmed[0]} partner — accesses deals through CION's channel`;
-    strength = "confirmed";
-  } else if (brochure.length > 0) {
-    bullet = `Listed ${brochure.slice(0, 2).join(" and ")} on their ADV brochure`;
-    strength = "inferred";
+  if (brochure.length >= 2) {
+    bullet = `Listed ${brochure[0]} and ${brochure[1]} on their ADV brochure`;
+  } else if (brochure.length === 1 && a.platforms.length >= 2) {
+    const others = a.platforms.filter((p) => p !== brochure[0]);
+    bullet = `Listed ${brochure[0]} on ADV brochure; active on ${others.slice(0, 2).join(" and ")}`;
+  } else if (brochure.length === 1) {
+    bullet = `Listed ${brochure[0]} on their ADV brochure — alternative credit channel presence`;
   } else if (inferred.length >= 2) {
-    bullet = `Active on ${inferred[0]} and ${inferred[1]} — overlaps CION's distribution channels (EDGAR inferred)`;
-    strength = "inferred";
+    bullet = `Active on ${inferred[0]} and ${inferred[1]} — inferred from EDGAR filings`;
+  } else if (inferred.length === 1) {
+    bullet = `Likely ${inferred[0]} participant — inferred from EDGAR filings`;
   } else {
-    bullet = `Likely ${inferred[0]} partner — EDGAR filing inference`;
-    strength = "inferred";
+    return null;
   }
   return {
     bullet,
-    strength,
-    source: confirmed.length > 0 ? "Platform CSV" : brochure.length > 0 ? "ADV Brochure" : "EDGAR Inferred",
+    strength: brochure.length > 0 ? "inferred" : "limited",
+    source: brochure.length > 0 ? "ADV Brochure" : "EDGAR Inferred",
   };
 }
 
@@ -129,12 +120,15 @@ function buildSignals(a: AdvisorProfile): Signal[] {
 }
 
 function getConfidence(signals: Signal[], advisor: AdvisorProfile): { label: string; dotColor: string } {
-  const bigAum   = advisor.aum_tier === "mega" || advisor.aum_tier === "large";
-  const multiPlat = advisor.platform_count >= 2;
-  const confirmed = signals.filter((s) => s.strength === "confirmed").length;
-  if (confirmed >= 2 || (bigAum && multiPlat)) return { label: "Strong signal",   dotColor: "bg-emerald-400" };
-  if (confirmed >= 1 || bigAum || multiPlat)   return { label: "Emerging signal", dotColor: "bg-blue-400" };
-  return                                               { label: "Limited data",    dotColor: "bg-slate-400" };
+  const bigAum      = advisor.aum_tier === "mega" || advisor.aum_tier === "large";
+  const multiPlat   = advisor.platform_count >= 2;
+  const has13F      = (advisor.thirteenf_bdc_value_usd ?? 0) >= 1e8;
+  const confirmed   = signals.filter((s) => s.strength === "confirmed").length;
+  if (confirmed >= 2 || (bigAum && (multiPlat || has13F)) || (has13F && bigAum))
+    return { label: "Strong signal",   dotColor: "bg-emerald-400" };
+  if (confirmed >= 1 || bigAum || multiPlat || has13F)
+    return { label: "Emerging signal", dotColor: "bg-blue-400" };
+  return { label: "Limited data",    dotColor: "bg-slate-400" };
 }
 
 // ── Priority — on dark header backgrounds ─────────────────────────────────────
@@ -149,31 +143,38 @@ interface Priority {
 }
 
 function getPriority(a: AdvisorProfile): Priority {
-  const hasDeals        = a.allocation_count_90d > 0;
-  const multiPlat       = a.platform_count >= 2;
-  const onePlat         = a.platform_count === 1;
-  const bigAum          = a.aum_tier === "mega" || a.aum_tier === "large";
-  const hasConfirmedPlat = Object.values(a.platform_sources ?? {}).some((s) => s === "csv");
+  const hasDeals  = a.allocation_count_90d > 0;
+  const multiPlat = a.platform_count >= 2;
+  const onePlat   = a.platform_count === 1;
+  const bigAum    = a.aum_tier === "mega" || a.aum_tier === "large";
+  // 13F: institutional-scale BDC buyer ($100M+ in BDC positions) is a direct proxy for CION buyer
+  const bigThirteenF = (a.thirteenf_bdc_value_usd ?? 0) >= 1e8;
+  const anyThirteenF = (a.thirteenf_bdc_value_usd ?? 0) > 0;
 
-  if ((hasDeals && (multiPlat || bigAum)) || (hasConfirmedPlat && (hasDeals || bigAum)) || (bigAum && multiPlat)) {
+  if ((hasDeals && (multiPlat || bigAum || bigThirteenF)) || (bigThirteenF && bigAum) || (bigAum && multiPlat)) {
     return { label: "High Priority", emoji: "🔥", darkBadge: "bg-red-500/20 text-red-300 border-red-500/40",  rankBg: "bg-red-500" };
   }
-  if (hasDeals || multiPlat || (onePlat && bigAum) || hasConfirmedPlat) {
+  if (hasDeals || multiPlat || (onePlat && bigAum) || bigThirteenF || (anyThirteenF && bigAum)) {
     return { label: "Medium",        emoji: "⚡", darkBadge: "bg-blue-500/20 text-blue-300 border-blue-500/40", rankBg: "bg-blue-600" };
   }
   return   { label: "Watchlist",     emoji: "👀", darkBadge: "bg-slate-600 text-slate-300 border-slate-500",   rankBg: "bg-slate-500" };
 }
 
 function getOutcomeAnchor(a: AdvisorProfile, signals: Signal[]): string | null {
-  const hasDeals  = a.allocation_count_90d > 0;
-  const multiPlat = a.platform_count >= 2;
-  if (hasDeals && multiPlat)    return "Active buying behavior across multiple channels → strong fit for current raise";
-  if (hasDeals)                 return "Recent allocation activity + confirmed channel access → worth a call this week";
-  if (multiPlat && (a.aum_tier === "mega" || a.aum_tier === "large"))
-                                return "Institutional scale + active in alternative credit channels → positioned to allocate at scale";
-  if (a.platform_count > 0 && (a.aum_tier === "mega" || a.aum_tier === "large"))
-                                return "Large AUM + alternative credit allocation history → capacity and channel confirmed";
-  if (signals.length >= 3)      return "Multiple data points align → high confidence on fit";
+  const hasDeals     = a.allocation_count_90d > 0;
+  const multiPlat    = a.platform_count >= 2;
+  const bigAum       = a.aum_tier === "mega" || a.aum_tier === "large";
+  const bigThirteenF = (a.thirteenf_bdc_value_usd ?? 0) >= 1e8;
+
+  if (hasDeals && multiPlat)     return "Active buying behavior across multiple channels → strong fit for current raise";
+  if (hasDeals && bigThirteenF)  return "Recent allocation activity + confirmed BDC holdings → call this week";
+  if (hasDeals)                  return "Recent allocation activity → worth a call this week";
+  if (bigThirteenF && bigAum)    return "Institutional BDC holder + large AUM → positioned to allocate at scale";
+  if (bigThirteenF)              return "Confirmed BDC position holder per SEC 13F → already buys this asset class";
+  if (multiPlat && bigAum)       return "Institutional scale + active in alternative credit channels → positioned to allocate";
+  if (a.platform_count > 0 && bigAum)
+                                 return "Large AUM + alternative credit allocation history → capacity and channel inferred";
+  if (signals.length >= 3)       return "Multiple data points align → high confidence on fit";
   return null;
 }
 

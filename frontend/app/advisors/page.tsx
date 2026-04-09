@@ -25,19 +25,6 @@ const TIER_LABELS: Record<string, string> = {
   unknown: "—",
 };
 
-const PLATFORM_COLORS: Record<string, string> = {
-  iCapital: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  CAIS: "bg-amber-50 text-amber-700 border-amber-200",
-  Orion: "bg-violet-50 text-violet-700 border-violet-200",
-  Houlihan: "bg-rose-50 text-rose-700 border-rose-200",
-  "Houlihan Lokey": "bg-rose-50 text-rose-700 border-rose-200",
-  default: "bg-slate-50 text-slate-600 border-slate-200",
-};
-
-function platformColor(name: string): string {
-  return PLATFORM_COLORS[name] ?? PLATFORM_COLORS.default;
-}
-
 function ActivityDots({ score }: { score: number }) {
   // 0–4 dots based on score buckets: 0, <4, <8, <12, 12+
   const filled = score >= 12 ? 4 : score >= 8 ? 3 : score >= 4 ? 2 : score >= 1 ? 1 : 0;
@@ -84,27 +71,6 @@ function AdvisorRow({ advisor, rank }: { advisor: AdvisorProfile; rank: number }
         {advisor.private_fund_aum_fmt && (
           <div className="text-xs text-slate-400 mt-0.5">
             {advisor.private_fund_aum_fmt} private
-          </div>
-        )}
-      </td>
-
-      {/* Platforms */}
-      <td className="py-3 pr-4 hidden md:table-cell">
-        {advisor.platforms.length === 0 ? (
-          <span className="text-xs text-slate-300">—</span>
-        ) : (
-          <div className="flex flex-wrap gap-1">
-            {advisor.platforms.slice(0, 3).map((p) => (
-              <span
-                key={p}
-                className={`text-xs px-1.5 py-0.5 rounded border ${platformColor(p)}`}
-              >
-                {p}
-              </span>
-            ))}
-            {advisor.platforms.length > 3 && (
-              <span className="text-xs text-slate-400">+{advisor.platforms.length - 3}</span>
-            )}
           </div>
         )}
       </td>
@@ -268,7 +234,6 @@ export default function AdvisorsPage() {
                     <th className="py-2.5 pl-4 pr-2 text-left text-xs font-medium text-slate-500 w-8">#</th>
                     <th className="py-2.5 pr-4 text-left text-xs font-medium text-slate-500">Firm</th>
                     <th className="py-2.5 pr-4 text-left text-xs font-medium text-slate-500 hidden sm:table-cell">AUM</th>
-                    <th className="py-2.5 pr-4 text-left text-xs font-medium text-slate-500 hidden md:table-cell">Platforms</th>
                     <th className="py-2.5 pr-4 text-left text-xs font-medium text-slate-500">Activity</th>
                   </tr>
                 </thead>
@@ -280,7 +245,7 @@ export default function AdvisorsPage() {
                     if (tableRows.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={5} className="py-12 text-center text-slate-400 text-sm">
+                          <td colSpan={4} className="py-12 text-center text-slate-400 text-sm">
                             {query ? "No advisors match your search" : "No additional advisors beyond top 10"}
                           </td>
                         </tr>
@@ -298,7 +263,7 @@ export default function AdvisorsPage() {
             <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-400">
               <span>Activity dots: platform count + AUM tier + recent deals</span>
               <span>Ranked highest-activity first</span>
-              <span>Source: Form ADV · EDGAR · iCapital/CAIS inferred</span>
+              <span>Source: Form ADV · EDGAR · SEC 13F</span>
             </div>
           </>
         )}

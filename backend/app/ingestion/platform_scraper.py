@@ -329,6 +329,15 @@ async def run(
         print(f"    {platform}: {count}")
 
 
+def clear_csv_rows() -> None:
+    """Delete all rows from ria_platforms where source = 'csv'."""
+    from app.db.client import get_db
+    db = get_db()
+    result = db.table("ria_platforms").delete().eq("source", "csv").execute()
+    deleted = len(result.data) if result.data else 0
+    print(f"Deleted {deleted} rows from ria_platforms where source='csv'.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="pcIQ — platform RIA roster ingestion")
     parser.add_argument(
@@ -340,7 +349,16 @@ def main() -> None:
         help="Path to CSV file (only used when --source=csv)",
     )
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--clear-csv", action="store_true",
+        help="Delete all rows from ria_platforms where source='csv', then exit.",
+    )
     args = parser.parse_args()
+
+    if args.clear_csv:
+        clear_csv_rows()
+        return
+
     asyncio.run(run(args.source, args.file, dry_run=args.dry_run))
 
 
