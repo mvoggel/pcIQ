@@ -37,7 +37,7 @@ log = logging.getLogger(__name__)
 
 EDGAR_BASE = "https://www.sec.gov"
 EFTS_BASE  = "https://efts.sec.gov"
-_DELAY     = 0.15   # stay well under SEC's 10 req/s limit
+_DELAY     = 0.4    # stay well under SEC's 10 req/s limit (3 concurrent × 0.4s ≈ 7.5 req/s)
 
 # BDC issuers we care about: CUSIP → ticker
 BDC_CUSIPS: dict[str, str] = {

@@ -2,14 +2,14 @@
 13F ingestion runner.
 
 Fetches 13F-HR filings from EDGAR for a given date range, filters holdings
-to BDC issuers, attempts to match filers to RIAs in our database by name,
+to BDC issuers, attempts to match filers to RIAs in our database by name or CIK,
 and upserts results to the thirteenf_holdings table.
 
-Matching strategy:
-  - Filer name (from EDGAR) is fuzzy-matched against rias.firm_name.
-  - If a match is found, ria_crd is populated; otherwise it stays NULL.
-  - NULL-crd rows are still stored — they can be used for dashboards showing
-    the broader institutional buyer universe even without a CRD link.
+Matching strategy (in order):
+  1. CIK match — filer CIK against rias.cik (most reliable)
+  2. Normalized name exact match — strips legal suffixes, compares uppercased
+  - NULL-crd rows are still stored — they represent the broader institutional
+    buyer universe even without a CRD link.
 
 Usage:
     asyncio.run(run(start_date, end_date))
@@ -33,8 +33,8 @@ def len_bdc_cusips() -> int:
 
 log = logging.getLogger(__name__)
 
-# Throttle concurrent filing fetches to avoid hammering SEC
-_CONCURRENCY = 10
+# Throttle concurrent filing fetches to stay under SEC's 10 req/s limit
+_CONCURRENCY = 3
 
 
 def _clean_efts_name(name: str) -> str:
@@ -58,20 +58,36 @@ def _normalize(name: str) -> str:
     return name.strip()
 
 
-def _build_ria_index(ria_rows: list[dict]) -> dict[str, str]:
-    """Return {normalized_name: crd_number}."""
-    idx: dict[str, str] = {}
+def _build_ria_index(ria_rows: list[dict]) -> tuple[dict[str, str], dict[str, str]]:
+    """Return (name_index, cik_index) where each maps to crd_number."""
+    name_idx: dict[str, str] = {}
+    cik_idx:  dict[str, str] = {}
     for r in ria_rows:
+        crd = r.get("crd_number") or ""
+        if not crd:
+            continue
         key = _normalize(r.get("firm_name") or "")
         if key:
-            idx[key] = r.get("crd_number") or ""
-    return idx
+            name_idx[key] = crd
+        cik = (r.get("cik") or "").lstrip("0")
+        if cik:
+            cik_idx[cik] = crd
+    return name_idx, cik_idx
 
 
-def _match_crd(entity_name: str, ria_index: dict[str, str]) -> str | None:
-    """Best-effort name match after stripping EFTS suffixes. Returns CRD or None."""
+def _match_crd(entity_name: str, filer_cik: str,
+               name_index: dict[str, str], cik_index: dict[str, str]) -> str | None:
+    """
+    Best-effort match. Tries CIK first (most reliable), then normalized name.
+    Returns CRD or None.
+    """
+    # CIK match (strip leading zeros for comparison)
+    crd = cik_index.get(filer_cik.lstrip("0"))
+    if crd:
+        return crd
+    # Normalized name match
     key = _normalize(_clean_efts_name(entity_name))
-    return ria_index.get(key) or None
+    return name_index.get(key) or None
 
 
 async def run(
@@ -90,16 +106,16 @@ async def run(
 
     db = get_db()
 
-    # ── 1. Load RIA name → CRD index for matching ─────────────────────
+    # ── 1. Load RIA name + CIK → CRD index for matching ─────────────────────
     ria_rows = (
         db.table("rias")
-        .select("crd_number, firm_name")
+        .select("crd_number, firm_name, cik")
         .eq("is_active", True)
         .execute()
         .data or []
     )
-    ria_index = _build_ria_index(ria_rows)
-    log.info("Loaded %d RIAs for name matching", len(ria_index))
+    name_index, cik_index = _build_ria_index(ria_rows)
+    log.info("Loaded %d RIAs for matching (%d with CIK, %d by name)", len(ria_rows), len(cik_index), len(name_index))
 
     # ── 2. Search for 13F-HR filings containing our BDC CUSIPs ────────
     # max_filers controls max results per CUSIP (10 CUSIPs × max = total ceiling)
@@ -142,7 +158,7 @@ async def run(
             return
 
         filers_with_bdc += 1
-        ria_crd = _match_crd(name, ria_index) or None
+        ria_crd = _match_crd(name, cik, name_index, cik_index) or None
 
         for h in holdings:
             rows_to_upsert.append({

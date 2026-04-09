@@ -41,6 +41,7 @@ export default function AdvisorsPage() {
   const [query, setQuery]             = useState("");
   const [visibleCount, setVisible]    = useState(PAGE_SIZE);
   const [showInfo, setShowInfo]       = useState(false);
+  const [filterOpen, setFilterOpen]   = useState(false);
   const [activeModal, setActiveModal] = useState<{ advisor: AdvisorProfile; rank: number } | null>(null);
 
   useEffect(() => {
@@ -78,23 +79,66 @@ export default function AdvisorsPage() {
 
       {/* Subheader */}
       <div className="bg-slate-800 border-b border-slate-700">
-        <div className="px-4 sm:px-6 py-3 max-w-screen-xl mx-auto flex flex-col sm:flex-row sm:items-center gap-3">
-          <div className="flex-1">
-            <h1 className="text-sm font-semibold text-white">Advisor Intelligence</h1>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Alternative credit allocation signals — who to call first
-            </p>
+        <div className="px-4 sm:px-6 py-3 max-w-screen-xl mx-auto">
+          {/* Title row — on mobile acts as toggle trigger */}
+          <div className="flex items-center justify-between sm:hidden">
+            <div>
+              <h1 className="text-sm font-semibold text-white">Advisor Intelligence</h1>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Alternative credit allocation signals — who to call first
+              </p>
+            </div>
+            <button
+              onClick={() => setFilterOpen((v) => !v)}
+              aria-label="Toggle territory filter"
+              className="flex items-center gap-1.5 ml-3 shrink-0 px-2.5 py-1.5 rounded bg-slate-700 text-slate-300 text-xs font-medium"
+            >
+              <span>{territory || "All"}</span>
+              <svg
+                className={`w-3.5 h-3.5 transition-transform duration-200 ${filterOpen ? "rotate-180" : ""}`}
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
           </div>
 
-          {/* Territory filter */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-slate-400 shrink-0">Territory</span>
-            <div className="flex flex-wrap gap-1">
+          {/* Desktop: original side-by-side layout */}
+          <div className="hidden sm:flex sm:items-center sm:gap-3">
+            <div className="flex-1">
+              <h1 className="text-sm font-semibold text-white">Advisor Intelligence</h1>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Alternative credit allocation signals — who to call first
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-slate-400 shrink-0">Territory</span>
+              <div className="flex flex-wrap gap-1">
+                {TERRITORIES.map((t) => (
+                  <button
+                    key={t || "all"}
+                    onClick={() => setTerritory(t)}
+                    className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                      territory === t
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                    }`}
+                  >
+                    {t || "All"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Mobile: expandable territory filter */}
+          {filterOpen && (
+            <div className="sm:hidden mt-3 pt-3 border-t border-slate-700 flex flex-wrap gap-1.5">
               {TERRITORIES.map((t) => (
                 <button
                   key={t || "all"}
-                  onClick={() => setTerritory(t)}
-                  className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                  onClick={() => { setTerritory(t); setFilterOpen(false); }}
+                  className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
                     territory === t
                       ? "bg-blue-600 text-white"
                       : "bg-slate-700 text-slate-300 hover:bg-slate-600"
@@ -104,7 +148,7 @@ export default function AdvisorsPage() {
                 </button>
               ))}
             </div>
-          </div>
+          )}
         </div>
       </div>
 
