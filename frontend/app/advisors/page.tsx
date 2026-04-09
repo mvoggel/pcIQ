@@ -2,21 +2,45 @@
 
 import { useState, useEffect } from "react";
 import AppHeader from "@/components/AppHeader";
-import TopAdvisorsPanel, { AdvisorRow } from "@/components/TopAdvisorsPanel";
+import { AdvisorRow } from "@/components/TopAdvisorsPanel";
 import AdvisorModal from "@/components/AdvisorModal";
 import { fetchAdvisors } from "@/lib/api";
 import { AdvisorProfile, AdvisorsResponse } from "@/lib/types";
+import { getPriority } from "@/lib/advisorSignals";
 
 const TERRITORIES = ["", "Northeast", "Southeast", "Midwest", "Southwest", "West Coast"];
 const PAGE_SIZE   = 20;
 
+// ── Info panel ────────────────────────────────────────────────────────────────
+
+function InfoPanel() {
+  return (
+    <div className="mb-4 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3.5">
+      <p className="text-xs font-semibold text-blue-700 mb-1.5">What this list shows</p>
+      <p className="text-xs text-blue-800 leading-relaxed">
+        Every RIA in our database, ranked by their likelihood to allocate to CION's BDC.
+        Scored across three public SEC data sources:{" "}
+        <strong>SEC Form 13F</strong> (do they already hold BDC positions like ARCC or MAIN?),{" "}
+        <strong>EDGAR Form D</strong> (recent allocations to similar private credit funds?), and{" "}
+        <strong>Form ADV</strong> (AUM size and advisor headcount).{" "}
+        <span className="text-blue-700 font-medium">🔥 High Priority</span> firms have confirmed
+        buying behavior — they already allocate to this asset class. No third-party vendors;
+        all signals are derived from public SEC filings.
+      </p>
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 export default function AdvisorsPage() {
-  const [territory, setTerritory]   = useState("");
-  const [data, setData]             = useState<AdvisorsResponse | null>(null);
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState<string | null>(null);
-  const [query, setQuery]           = useState("");
-  const [visibleCount, setVisible]  = useState(PAGE_SIZE);
+  const [territory, setTerritory]     = useState("");
+  const [data, setData]               = useState<AdvisorsResponse | null>(null);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState<string | null>(null);
+  const [query, setQuery]             = useState("");
+  const [visibleCount, setVisible]    = useState(PAGE_SIZE);
+  const [showInfo, setShowInfo]       = useState(false);
   const [activeModal, setActiveModal] = useState<{ advisor: AdvisorProfile; rank: number } | null>(null);
 
   useEffect(() => {
@@ -24,19 +48,17 @@ export default function AdvisorsPage() {
     setError(null);
     setQuery("");
     setVisible(PAGE_SIZE);
+    setShowInfo(false);
     fetchAdvisors(territory)
       .then(setData)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [territory]);
 
-  // Reset visible count when search query changes
   useEffect(() => { setVisible(PAGE_SIZE); }, [query]);
 
   const allAdvisors: AdvisorProfile[] = data?.advisors ?? [];
 
-  // When searching: filter all advisors and show them as a flat list
-  // When not searching: Top 10 shown in panel; remaining go to the card list below
   const filtered = query.trim()
     ? allAdvisors.filter(
         (a) =>
@@ -44,11 +66,11 @@ export default function AdvisorsPage() {
           a.state.toLowerCase().includes(query.toLowerCase()) ||
           a.city.toLowerCase().includes(query.toLowerCase())
       )
-    : allAdvisors.slice(10);   // skip top 10 — they live in TopAdvisorsPanel
+    : allAdvisors;
 
-  const rankOffset   = query ? 0 : 10;
-  const visibleRows  = filtered.slice(0, visibleCount);
-  const remaining    = filtered.length - visibleCount;
+  const visibleRows = filtered.slice(0, visibleCount);
+  const remaining   = filtered.length - visibleCount;
+  const highCount   = allAdvisors.slice(0, 20).filter((a) => getPriority(a).score === 3).length;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -88,7 +110,7 @@ export default function AdvisorsPage() {
 
       <main className="px-4 sm:px-6 py-4 max-w-screen-xl mx-auto">
 
-        {/* ── Search bar — always at top, searches everything ── */}
+        {/* ── Search — always at top ── */}
         {data && !loading && (
           <div className="relative mb-5">
             <svg
@@ -134,41 +156,58 @@ export default function AdvisorsPage() {
 
         {data && !loading && (
           <>
-            {/* ── Top 10 — hidden while search is active ── */}
-            {!query && (
-              <TopAdvisorsPanel advisors={allAdvisors} territory={data.territory} />
-            )}
+            {/* ── Section heading ── */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-semibold text-slate-900">
+                  {query
+                    ? `${filtered.length} result${filtered.length !== 1 ? "s" : ""} for "${query}"`
+                    : "Top Advisors to Call This Week"}
+                </h2>
 
-            {/* ── Remaining advisors (or search results) ── */}
-            <div className="flex items-center gap-3 mb-3">
-              <h2 className="text-sm font-semibold text-slate-900 shrink-0">
-                {query
-                  ? `${filtered.length} result${filtered.length !== 1 ? "s" : ""} for "${query}"`
-                  : "All Advisors"}
-              </h2>
-              <div className="h-px flex-1 bg-slate-200" />
-              {!query && filtered.length > 0 && (
-                <span className="text-xs text-slate-400 shrink-0">
-                  #{11}–{allAdvisors.length}
+                {/* Info circle — click/tap to toggle */}
+                {!query && (
+                  <button
+                    onClick={() => setShowInfo((v) => !v)}
+                    aria-label="What is this list?"
+                    className={`shrink-0 w-5 h-5 rounded-full border flex items-center justify-center text-xs font-bold transition-colors ${
+                      showInfo
+                        ? "bg-blue-600 border-blue-600 text-white"
+                        : "border-slate-300 text-slate-400 hover:border-blue-400 hover:text-blue-500"
+                    }`}
+                  >
+                    i
+                  </button>
+                )}
+              </div>
+
+              {/* Right-side context */}
+              {!query && (
+                <span className="text-xs text-slate-400 hidden sm:inline">
+                  {highCount > 0
+                    ? `${highCount} high-priority firm${highCount > 1 ? "s" : ""} · `
+                    : ""}
+                  SEC 13F · Form D · EDGAR
                 </span>
               )}
             </div>
 
+            {/* Info panel — expands below heading */}
+            {showInfo && !query && <InfoPanel />}
+
+            {/* ── Unified advisor list ── */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
               {visibleRows.length === 0 ? (
                 <div className="py-12 text-center text-slate-400 text-sm">
-                  {query
-                    ? "No advisors match your search — try a different firm name or state"
-                    : "No additional advisors beyond top 10"}
+                  No advisors match your search — try a different firm name or state
                 </div>
               ) : (
                 visibleRows.map((a, i) => (
                   <AdvisorRow
                     key={a.crd_number || i}
                     advisor={a}
-                    rank={rankOffset + i + 1}
-                    onView={() => setActiveModal({ advisor: a, rank: rankOffset + i + 1 })}
-                    compact
+                    rank={i + 1}
+                    onView={() => setActiveModal({ advisor: a, rank: i + 1 })}
                   />
                 ))
               )}
@@ -191,13 +230,11 @@ export default function AdvisorsPage() {
             <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-400">
               <span>Priority scored across SEC Form 13F · EDGAR Form D · Form ADV</span>
               <span>Click any row to open the full call brief</span>
-              <span>Source: Form ADV · EDGAR · SEC 13F</span>
             </div>
           </>
         )}
       </main>
 
-      {/* Modal for card list rows */}
       {activeModal && (
         <AdvisorModal
           advisor={activeModal.advisor}
