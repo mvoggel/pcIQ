@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ClientType, ConfirmedRia, FundEnrichment, ManagerIntelligence, RiaMatch, Signal } from "@/lib/types";
-import { fetchFundDetail } from "@/lib/api";
+import { fetchFundDetail, fetchFundMovements } from "@/lib/api";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -546,10 +546,13 @@ interface Props {
   onClose: () => void;
 }
 
+type Movement = { firm_name: string; crd_number: string; city: string | null; state: string | null; aum_fmt: string | null; signal_date: string };
+
 export default function FundModal({ signal, onClose }: Props) {
   const [detail, setDetail] = useState<FundEnrichment | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(true);
   const [detailError, setDetailError] = useState(false);
+  const [movements, setMovements] = useState<Movement[]>([]);
 
   // Lock body scroll while modal is open.
   // This prevents iOS Safari from drifting the viewport horizontally
@@ -577,6 +580,14 @@ export default function FundModal({ signal, onClose }: Props) {
       .catch((e) => { if (e.name !== "AbortError") setDetailError(true); })
       .finally(() => { if (!controller.signal.aborted) setLoadingDetail(false); });
     return () => controller.abort();
+  }, [signal.cik, signal.accession_no]);
+
+  // Fetch recent advisor movement for this fund
+  useEffect(() => {
+    setMovements([]);
+    fetchFundMovements(signal.cik, signal.accession_no)
+      .then((r) => setMovements(r.movements))
+      .catch(() => {/* silent — section just stays hidden */});
   }, [signal.cik, signal.accession_no]);
 
   const loading = loadingDetail;
@@ -800,6 +811,46 @@ export default function FundModal({ signal, onClose }: Props) {
             )}
           </div>
 
+          {/* ── Recent Advisor Movement ── */}
+          {movements.length > 0 && (
+            <div>
+              <p className="text-xs uppercase tracking-wider text-slate-400 mb-2">Recent Advisor Deployment</p>
+              <div className="border border-blue-100 rounded-lg overflow-hidden">
+                <div className="px-4 py-2 bg-blue-50 border-b border-blue-100">
+                  <p className="text-xs text-blue-700 font-medium">
+                    {movements.length} advisor{movements.length !== 1 ? "s" : ""} deployed into this fund — Form D · 90d signal
+                  </p>
+                </div>
+                <ul className="divide-y divide-slate-50 bg-white">
+                  {movements.map((m, i) => {
+                    const dateStr = m.signal_date
+                      ? new Date(m.signal_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                      : null;
+                    const iapdUrl = `https://adviserinfo.sec.gov/firm/summary/${m.crd_number}`;
+                    return (
+                      <li key={i} className="flex items-center justify-between px-4 py-2.5 gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-800 truncate">{m.firm_name}</p>
+                          <p className="text-xs text-slate-400">
+                            {[m.city, m.state].filter(Boolean).join(", ")}
+                            {m.aum_fmt && <span className="ml-2">· {m.aum_fmt}</span>}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          {dateStr && <span className="text-xs text-slate-400">{dateStr}</span>}
+                          <a href={iapdUrl} target="_blank" rel="noopener noreferrer"
+                            className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 bg-blue-50 rounded px-2 py-1 whitespace-nowrap">
+                            IAPD →
+                          </a>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            </div>
+          )}
+
           {/* ── Confirmed Advisors Buying This Strategy ── */}
           {(loading || (detail?.confirmed_rias && detail.confirmed_rias.length > 0)) && (
             <div>
@@ -813,17 +864,19 @@ export default function FundModal({ signal, onClose }: Props) {
             </div>
           )}
 
-          {/* ── Likely Advisors Buying This Strategy ── */}
-          <div>
-            <div className="flex items-center gap-1 mb-1">
-              <p className="text-xs uppercase tracking-wider text-slate-400">
-                Likely Advisors Buying This Strategy
-              </p>
-              <InfoTooltip text="RIAs in this fund's solicitation territory with $100M+ AUM, sourced from Form ADV filings. These firms have the scale and geography to allocate to this strategy — but platform relationship is not yet confirmed. Use as a prospecting list alongside the Confirmed section above." />
+          {/* ── Likely Advisors — only shown when no confirmed data exists ── */}
+          {!detail?.confirmed_rias?.length && (
+            <div>
+              <div className="flex items-center gap-1 mb-1">
+                <p className="text-xs uppercase tracking-wider text-slate-400">
+                  Likely Advisors Buying This Strategy
+                </p>
+                <InfoTooltip text="RIAs in this fund's solicitation territory with $100M+ AUM, sourced from Form ADV filings. These firms have the scale and geography to allocate to this strategy — but platform relationship is not yet confirmed. Use as a prospecting list alongside the Confirmed section above." />
+              </div>
+              <p className="text-xs text-slate-400 mb-2 normal-case">RIAs in territory · $100M+ AUM · Form ADV</p>
+              <LikelyAllocators rias={detail?.likely_rias} loading={loading} />
             </div>
-            <p className="text-xs text-slate-400 mb-2 normal-case">RIAs in territory · $100M+ AUM · Form ADV</p>
-            <LikelyAllocators rias={detail?.likely_rias} loading={loading} />
-          </div>
+          )}
 
         </div>
 

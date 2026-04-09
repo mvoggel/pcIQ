@@ -49,6 +49,15 @@ export async function fetchThirteenFHolders(
   return res.json();
 }
 
+export async function fetchFundMovements(cik: string, accessionNo: string): Promise<{
+  movements: { firm_name: string; crd_number: string; city: string | null; state: string | null; aum_fmt: string | null; signal_date: string }[];
+  total: number;
+}> {
+  const res = await fetch(`${API_BASE}/api/fund/${cik}/${encodeURIComponent(accessionNo)}/movements`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json();
+}
+
 export async function fetchAdvisorFunds(crd: string): Promise<import("./types").AdvisorFundsResponse> {
   const res = await fetch(`${API_BASE}/api/advisors/${encodeURIComponent(crd)}/funds`, { cache: "no-store" });
   if (!res.ok) throw new Error(`API error ${res.status}`);

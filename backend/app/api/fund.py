@@ -231,6 +231,79 @@ async def _fetch_submissions(cik: str) -> dict:
     return {}
 
 
+@router.get("/fund/{cik}/{accession_no}/movements")
+def get_fund_movements(cik: str, accession_no: str) -> dict:
+    """
+    Return recent RIA deployment events for a specific fund filing.
+    Queries ria_fund_allocations → rias to show which advisors have
+    allocated to this fund and when, sorted most-recent first.
+    """
+    from datetime import date, timedelta
+    db = get_db()
+
+    # 1. Find the filing's internal ID
+    filing_row = (
+        db.table("form_d_filings")
+        .select("id")
+        .eq("cik", cik)
+        .eq("accession_no", accession_no)
+        .limit(1)
+        .execute()
+    ).data
+    if not filing_row:
+        return {"movements": [], "total": 0}
+
+    filing_id = filing_row[0]["id"]
+
+    # 2. Fetch allocation events for this filing (no date cutoff — show full history)
+    alloc_rows = (
+        db.table("ria_fund_allocations")
+        .select("ria_id, signal_date")
+        .eq("filing_id", filing_id)
+        .order("signal_date", desc=True)
+        .limit(50)
+        .execute()
+    ).data or []
+
+    if not alloc_rows:
+        return {"movements": [], "total": 0}
+
+    # 3. Fetch RIA names for those IDs
+    ria_ids = list({r["ria_id"] for r in alloc_rows})
+    ria_rows = (
+        db.table("rias")
+        .select("id, crd_number, firm_name, city, state, aum")
+        .in_("id", ria_ids[:50])
+        .execute()
+    ).data or []
+    ria_by_id = {r["id"]: r for r in ria_rows}
+
+    movements = []
+    for a in alloc_rows:
+        ria = ria_by_id.get(a["ria_id"])
+        if not ria:
+            continue
+        aum = ria.get("aum")
+        aum_fmt = None
+        if aum:
+            if aum >= 1e12:
+                aum_fmt = f"${aum/1e12:.1f}T"
+            elif aum >= 1e9:
+                aum_fmt = f"${aum/1e9:.1f}B"
+            elif aum >= 1e6:
+                aum_fmt = f"${aum/1e6:.0f}M"
+        movements.append({
+            "firm_name":   ria["firm_name"],
+            "crd_number":  ria["crd_number"],
+            "city":        ria.get("city"),
+            "state":       ria.get("state"),
+            "aum_fmt":     aum_fmt,
+            "signal_date": a["signal_date"],
+        })
+
+    return {"movements": movements, "total": len(movements)}
+
+
 @router.get("/fund/{cik}/{accession_no}")
 async def get_fund_detail(
     cik: str, accession_no: str, background_tasks: BackgroundTasks
