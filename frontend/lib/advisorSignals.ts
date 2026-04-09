@@ -153,20 +153,20 @@ export function getPriority(a: AdvisorProfile): Priority {
 
   if (score === 3) {
     return {
-      label: "High Priority", emoji: "🔥", score: 3,
+      label: "High Priority", emoji: "", score: 3,
       lightBadge: "bg-red-50 text-red-700 border-red-200",
       rankBg: "bg-red-500",
     };
   }
   if (score === 2) {
     return {
-      label: "Medium", emoji: "⚡", score: 2,
+      label: "Medium", emoji: "", score: 2,
       lightBadge: "bg-blue-50 text-blue-700 border-blue-200",
       rankBg: "bg-blue-500",
     };
   }
   return {
-    label: "Watchlist", emoji: "👀", score: 1,
+    label: "Watchlist", emoji: "", score: 1,
     lightBadge: "bg-slate-100 text-slate-500 border-slate-200",
     rankBg: "bg-slate-400",
   };

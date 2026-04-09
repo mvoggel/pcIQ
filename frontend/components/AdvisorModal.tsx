@@ -121,7 +121,7 @@ export default function AdvisorModal({ advisor, rank, onClose }: Props) {
               <span
                 className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full border ${priority.lightBadge}`}
               >
-                {priority.emoji} {priority.label}
+                {priority.label}
               </span>
             </div>
             <button
@@ -253,18 +253,9 @@ export default function AdvisorModal({ advisor, rank, onClose }: Props) {
           <div className="bg-slate-50 rounded-lg px-4 py-3 border border-slate-100">
             <p className="text-xs font-semibold text-slate-500 mb-2">How priority is calculated</p>
             <ul className="space-y-1.5 text-xs text-slate-400">
-              <li className="flex items-start gap-2">
-                <span className="shrink-0 mt-px">🔥</span>
-                <span><strong className="text-slate-600">High Priority</strong> — 13F BDC holdings + Form D allocations + AUM ≥ $1B. All three signals confirmed.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="shrink-0 mt-px">⚡</span>
-                <span><strong className="text-slate-600">Medium</strong> — Any two of: 13F holdings, Form D allocations, AUM ≥ $1B.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="shrink-0 mt-px">👀</span>
-                <span><strong className="text-slate-600">Watchlist</strong> — One signal or AUM ≥ $500M. Worth monitoring.</span>
-              </li>
+              <li><strong className="text-slate-600">High Priority</strong> — 13F BDC holdings + Form D allocations + AUM ≥ $1B. All three signals confirmed.</li>
+              <li><strong className="text-slate-600">Medium</strong> — Any two of: 13F holdings, Form D allocations, AUM ≥ $1B.</li>
+              <li><strong className="text-slate-600">Watchlist</strong> — One signal or AUM ≥ $500M. Worth monitoring.</li>
             </ul>
             <p className="text-xs text-slate-300 mt-2">All signals from public SEC filings — no third-party data vendors.</p>
           </div>

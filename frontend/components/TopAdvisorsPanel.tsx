@@ -65,7 +65,7 @@ export function AdvisorRow({
           <span
             className={`shrink-0 inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border ${priority.lightBadge}`}
           >
-            {priority.emoji} {priority.label}
+            {priority.label}
           </span>
         </div>
 

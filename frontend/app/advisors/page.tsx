@@ -23,7 +23,7 @@ function InfoPanel() {
         <strong>SEC Form 13F</strong> (do they already hold BDC positions like ARCC or MAIN?),{" "}
         <strong>EDGAR Form D</strong> (recent allocations to similar private credit funds?), and{" "}
         <strong>Form ADV</strong> (AUM size and advisor headcount).{" "}
-        <span className="text-blue-700 font-medium">🔥 High Priority</span> firms have confirmed
+        <span className="text-blue-700 font-medium">High Priority</span> firms have confirmed
         buying behavior — they already allocate to this asset class. No third-party vendors;
         all signals are derived from public SEC filings.
       </p>
