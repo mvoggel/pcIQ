@@ -145,25 +145,20 @@ export function buildSignals(a: AdvisorProfile): Signal[] {
 // ── Priority ──────────────────────────────────────────────────────────────────
 
 export function getPriority(a: AdvisorProfile): Priority {
-  const hasDeals     = a.allocation_count_90d > 0;
-  const multiPlat    = a.platform_count >= 2;
-  const onePlat      = a.platform_count === 1;
-  const bigAum       = a.aum_tier === "mega" || a.aum_tier === "large";
-  const bigThirteenF = (a.thirteenf_bdc_value_usd ?? 0) >= 1e8;
-  const anyThirteenF = (a.thirteenf_bdc_value_usd ?? 0) > 0;
+  // Use the backend-calculated score as single source of truth.
+  // Score 3 = High: Form D + 13F + AUM ≥ $1B
+  // Score 2 = Medium: any two of those three pillars
+  // Score 1 = Watchlist: one signal or AUM ≥ $500M
+  const score = a.priority_score ?? 1;
 
-  if (
-    (hasDeals && (multiPlat || bigAum || bigThirteenF)) ||
-    (bigThirteenF && bigAum) ||
-    (bigAum && multiPlat)
-  ) {
+  if (score === 3) {
     return {
       label: "High Priority", emoji: "🔥", score: 3,
       lightBadge: "bg-red-50 text-red-700 border-red-200",
       rankBg: "bg-red-500",
     };
   }
-  if (hasDeals || multiPlat || (onePlat && bigAum) || bigThirteenF || (anyThirteenF && bigAum)) {
+  if (score === 2) {
     return {
       label: "Medium", emoji: "⚡", score: 2,
       lightBadge: "bg-blue-50 text-blue-700 border-blue-200",
