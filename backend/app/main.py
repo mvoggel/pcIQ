@@ -7,6 +7,7 @@ from app.api.fund import router as fund_router
 from app.api.ingest import router as ingest_router
 from app.api.platforms import router as platforms_router
 from app.api.rias import router as rias_router
+from app.api.salesforce import router as salesforce_router
 from app.api.signals import router as signals_router
 from app.api.thirteenf import router as thirteenf_router
 from app.config import settings
@@ -35,6 +36,7 @@ app.include_router(ingest_router)
 app.include_router(rias_router)
 app.include_router(platforms_router)
 app.include_router(thirteenf_router)
+app.include_router(salesforce_router)
 
 
 @app.get("/health")

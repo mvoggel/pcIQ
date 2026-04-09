@@ -93,6 +93,15 @@ export function AdvisorRow({
             {preview.bullet}
           </p>
         )}
+
+        {/* Active fund allocations chip */}
+        {!compact && advisor.allocation_count_90d > 0 && (
+          <p className="mt-1 flex items-center gap-1">
+            <span className="inline-flex items-center text-xs px-1.5 py-px rounded border font-medium bg-blue-50 text-blue-700 border-blue-200">
+              Active in {advisor.allocation_count_90d} fund{advisor.allocation_count_90d > 1 ? "s" : ""} · 90d
+            </span>
+          </p>
+        )}
       </div>
 
       {/* View arrow — visible on hover */}

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import AppHeader from "@/components/AppHeader";
 import CionFundCard from "@/components/CionFundCard";
 import CompetitorTicker from "@/components/CompetitorTicker";
-import { fetchCionFunds, fetchCompetitorFunds, fetchAdvisors } from "@/lib/api";
+import { fetchCionFunds, fetchCompetitorFunds, fetchAdvisors, fetchPlatformStats } from "@/lib/api";
 import { CionFund, AdvisorProfile } from "@/lib/types";
 
 // ── Platform chip ────────────────────────────────────────────────────────────
@@ -83,6 +83,13 @@ export default function CionPage() {
   const [riasLoading, setRiasLoading] = useState(true);
   const [riasError, setRiasError] = useState<string | null>(null);
 
+  const [platformStats, setPlatformStats] = useState<{
+    rias_tracked: number;
+    aum_represented: string;
+    states_covered: number;
+    feeder_funds: number;
+  } | null>(null);
+
   useEffect(() => {
     fetchCionFunds()
       .then(setFunds)
@@ -99,6 +106,10 @@ export default function CionPage() {
       .then((r) => setLikelyRias(r.advisors))
       .catch((e) => setRiasError(e.message))
       .finally(() => setRiasLoading(false));
+
+    fetchPlatformStats()
+      .then(setPlatformStats)
+      .catch(() => {/* silent — falls back to static values */});
   }, []);
 
   return (
@@ -109,10 +120,22 @@ export default function CionPage() {
       <div className="bg-slate-800 border-b border-slate-700">
         <div className="px-6 py-4 max-w-screen-lg mx-auto grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { value: "2,543", label: "RIAs tracked" },
-            { value: "$5.6T",  label: "AUM represented" },
-            { value: "44",     label: "states covered" },
-            { value: "138",    label: "feeder funds indexed" },
+            {
+              value: platformStats ? platformStats.rias_tracked.toLocaleString() : "2,543",
+              label: "RIAs tracked",
+            },
+            {
+              value: platformStats ? platformStats.aum_represented : "$5.6T",
+              label: "AUM represented",
+            },
+            {
+              value: platformStats ? String(platformStats.states_covered) : "44",
+              label: "states covered",
+            },
+            {
+              value: platformStats ? String(platformStats.feeder_funds) : "138",
+              label: "feeder funds indexed",
+            },
           ].map(({ value, label }) => (
             <div key={label} className="text-center">
               <p className="text-xl font-bold text-blue-400">{value}</p>

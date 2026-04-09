@@ -7,7 +7,7 @@ All writes use upsert so the ingestion job is safe to re-run (idempotent).
   - rias:            upsert on crd_number (stable FINRA identifier)
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from app.db.client import get_db
 from app.models.form_d import FormDFiling
@@ -134,6 +134,74 @@ def upsert_feeder_fund(row: dict) -> None:
         },
         on_conflict="accession_no",
     ).execute()
+
+
+def upsert_allocation_events(filing_id: int, filing: FormDFiling) -> int:
+    """
+    For a newly ingested Form D filing, find RIAs that use the same distribution
+    platforms and write allocation event rows to ria_fund_allocations.
+
+    Logic:
+      filing → known platform names (iCapital, CAIS, etc.)
+      platform names → ria_platforms → crd_numbers
+      crd_numbers → rias → ria ids
+      ria ids + filing_id → ria_fund_allocations (upsert on ria_id, filing_id)
+
+    Returns count of rows written.
+    """
+    db = get_db()
+
+    platform_names = filing.known_platform_names
+    if not platform_names:
+        return 0
+
+    signal_date = (filing.date_of_first_sale or filing.filed_at or date.today()).isoformat()
+
+    # Find RIAs on those platforms
+    ria_platform_rows = (
+        db.table("ria_platforms")
+        .select("crd_number")
+        .in_("platform_name", platform_names)
+        .execute()
+        .data or []
+    )
+    crd_numbers = list({r["crd_number"] for r in ria_platform_rows if r.get("crd_number")})
+    if not crd_numbers:
+        return 0
+
+    # Get ria ids
+    ria_rows = (
+        db.table("rias")
+        .select("id")
+        .in_("crd_number", crd_numbers[:500])
+        .execute()
+        .data or []
+    )
+    ria_ids = [r["id"] for r in ria_rows if r.get("id")]
+    if not ria_ids:
+        return 0
+
+    rows = [
+        {
+            "ria_id": ria_id,
+            "filing_id": filing_id,
+            "signal_date": signal_date,
+            "source": "form_d",
+            "confidence": 1.0,
+        }
+        for ria_id in ria_ids
+    ]
+
+    # Upsert in batches of 500 (Supabase PostgREST limit)
+    written = 0
+    for i in range(0, len(rows), 500):
+        db.table("ria_fund_allocations").upsert(
+            rows[i : i + 500],
+            on_conflict="ria_id,filing_id",
+        ).execute()
+        written += len(rows[i : i + 500])
+
+    return written
 
 
 def upsert_ria(ria: RIA, entity_id: int | None = None) -> int:

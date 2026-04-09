@@ -197,3 +197,73 @@ def get_advisors(
         "total": len(advisors),
         "advisors": advisors,
     }
+
+
+@router.get("/advisors/{crd}/funds")
+def get_advisor_funds(crd: str) -> dict:
+    """
+    Return active Form D fund filings this advisor is linked to in the last 90 days.
+    Powered by ria_fund_allocations → form_d_filings join.
+    Used by AdvisorModal to show which competitor funds are actively raising via
+    the same platforms this RIA uses.
+    """
+    db = get_db()
+
+    # Look up the RIA's internal id
+    ria_row = (
+        db.table("rias")
+        .select("id")
+        .eq("crd_number", crd)
+        .limit(1)
+        .execute()
+    ).data
+    if not ria_row:
+        return {"crd": crd, "funds": [], "total": 0}
+
+    ria_id = ria_row[0]["id"]
+    cutoff = (date.today() - timedelta(days=90)).isoformat()
+
+    # Get allocation events for this RIA in the last 90 days
+    alloc_rows = (
+        db.table("ria_fund_allocations")
+        .select("filing_id, signal_date")
+        .eq("ria_id", ria_id)
+        .gte("signal_date", cutoff)
+        .order("signal_date", desc=True)
+        .execute()
+    ).data or []
+
+    if not alloc_rows:
+        return {"crd": crd, "funds": [], "total": 0}
+
+    filing_ids = list({r["filing_id"] for r in alloc_rows})
+
+    # Fetch fund names and types for those filings
+    filing_rows = (
+        db.table("form_d_filings")
+        .select("id, entity_name, investment_fund_type, filed_at, cik, accession_no")
+        .in_("id", filing_ids[:50])
+        .execute()
+    ).data or []
+
+    # Map signal_date back to each filing
+    latest_signal: dict[int, str] = {}
+    for a in alloc_rows:
+        fid = a["filing_id"]
+        if fid not in latest_signal or a["signal_date"] > latest_signal[fid]:
+            latest_signal[fid] = a["signal_date"]
+
+    funds = [
+        {
+            "entity_name": f["entity_name"],
+            "investment_fund_type": f["investment_fund_type"],
+            "filed_at": f["filed_at"],
+            "cik": f["cik"],
+            "accession_no": f["accession_no"],
+            "signal_date": latest_signal.get(f["id"]),
+        }
+        for f in filing_rows
+    ]
+    funds.sort(key=lambda x: x["signal_date"] or "", reverse=True)
+
+    return {"crd": crd, "funds": funds, "total": len(funds)}

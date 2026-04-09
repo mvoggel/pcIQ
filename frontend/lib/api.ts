@@ -49,6 +49,23 @@ export async function fetchThirteenFHolders(
   return res.json();
 }
 
+export async function fetchAdvisorFunds(crd: string): Promise<import("./types").AdvisorFundsResponse> {
+  const res = await fetch(`${API_BASE}/api/advisors/${encodeURIComponent(crd)}/funds`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json();
+}
+
+export async function fetchPlatformStats(): Promise<{
+  rias_tracked: number;
+  aum_represented: string;
+  states_covered: number;
+  feeder_funds: number;
+}> {
+  const res = await fetch(`${API_BASE}/api/cion/platform-stats`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json();
+}
+
 export async function fetchSignals(
   territory: string,
   days: number = 7

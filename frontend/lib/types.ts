@@ -92,6 +92,25 @@ export interface ConfirmedRia {
   num_advisors: number | null;
   matched_platforms: string[];   // which platform(s) created the match
   source: string;                // "csv" | "scrape" | "edgar_inferred"
+  // Priority enrichment — added by fetch_confirmed_allocators
+  thirteenf_bdc_value_usd: number | null;
+  allocation_count_90d: number;
+  priority_score: 1 | 2 | 3;    // 3=High, 2=Medium, 1=Watchlist
+}
+
+export interface AdvisorFund {
+  entity_name: string;
+  investment_fund_type: string | null;
+  filed_at: string | null;
+  cik: string;
+  accession_no: string;
+  signal_date: string | null;
+}
+
+export interface AdvisorFundsResponse {
+  crd: string;
+  funds: AdvisorFund[];
+  total: number;
 }
 
 export interface AdvisorProfile {

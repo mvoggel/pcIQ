@@ -9,6 +9,8 @@ Investment Company Act and trade via NAV on Nasdaq.
 import yfinance as yf
 from fastapi import APIRouter
 
+from app.db.client import get_db
+
 router = APIRouter(prefix="/api")
 
 # CION's registered funds with context for the sales team
@@ -105,6 +107,66 @@ COMPETITOR_FUNDS = [
         "focus": "Private Credit",
     },
 ]
+
+
+@router.get("/cion/platform-stats")
+def get_platform_stats() -> dict:
+    """
+    Live platform coverage stats for the CION IQ page callout bar.
+    Returns counts directly from Supabase so the UI never shows stale numbers.
+    """
+    db = get_db()
+
+    # Total active RIAs
+    ria_res = (
+        db.table("rias")
+        .select("*", count="exact")
+        .eq("is_active", True)
+        .execute()
+    )
+    ria_count = ria_res.count or 0
+
+    # Sum AUM across enriched RIAs
+    aum_rows = (
+        db.table("rias")
+        .select("aum")
+        .eq("is_active", True)
+        .not_.is_("aum", "null")
+        .execute()
+    ).data or []
+    total_aum = sum(r["aum"] for r in aum_rows if r.get("aum"))
+
+    def _fmt_aum(v: float) -> str:
+        if v >= 1e12:
+            return f"${v / 1e12:.1f}T"
+        if v >= 1e9:
+            return f"${v / 1e9:.0f}B"
+        return f"${v / 1e6:.0f}M"
+
+    # Distinct states
+    state_rows = (
+        db.table("rias")
+        .select("state")
+        .eq("is_active", True)
+        .not_.is_("state", "null")
+        .execute()
+    ).data or []
+    states = len({r["state"] for r in state_rows if r.get("state")})
+
+    # Feeder funds indexed
+    feeder_res = (
+        db.table("feeder_funds")
+        .select("*", count="exact")
+        .execute()
+    )
+    feeder_count = feeder_res.count or 0
+
+    return {
+        "rias_tracked": ria_count,
+        "aum_represented": _fmt_aum(total_aum) if total_aum else "$0",
+        "states_covered": states,
+        "feeder_funds": feeder_count,
+    }
 
 
 @router.get("/cion/competitors")

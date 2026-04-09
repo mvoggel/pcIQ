@@ -186,12 +186,76 @@ def fetch_confirmed_allocators(
             .execute()
         )
 
+    confirmed_crds = [r["crd_number"] for r in (ria_result.data or []) if r.get("crd_number")]
+
+    # Enrich with 13F BDC holdings
+    thirteenf_by_crd: dict[str, float] = {}
+    if confirmed_crds:
+        try:
+            tf_rows = (
+                db.table("thirteenf_holdings")
+                .select("ria_crd, value_usd")
+                .in_("ria_crd", confirmed_crds)
+                .execute()
+            ).data or []
+            for tf in tf_rows:
+                crd2 = tf.get("ria_crd") or ""
+                thirteenf_by_crd[crd2] = thirteenf_by_crd.get(crd2, 0) + (tf.get("value_usd") or 0)
+        except Exception:
+            pass
+
+    # Enrich with recent allocation counts
+    alloc_by_crd: dict[str, int] = {}
+    if confirmed_crds:
+        try:
+            cutoff = (date.today() - timedelta(days=90)).isoformat()
+            ria_id_rows = (
+                db.table("rias")
+                .select("id, crd_number")
+                .in_("crd_number", confirmed_crds)
+                .execute()
+            ).data or []
+            crd_to_id = {r["crd_number"]: r["id"] for r in ria_id_rows}
+            ria_ids = list(crd_to_id.values())
+            if ria_ids:
+                alloc_rows = (
+                    db.table("ria_fund_allocations")
+                    .select("ria_id")
+                    .gte("signal_date", cutoff)
+                    .in_("ria_id", ria_ids[:500])
+                    .execute()
+                ).data or []
+                id_to_crd = {v: k for k, v in crd_to_id.items()}
+                for a in alloc_rows:
+                    crd2 = id_to_crd.get(a["ria_id"], "")
+                    if crd2:
+                        alloc_by_crd[crd2] = alloc_by_crd.get(crd2, 0) + 1
+        except Exception:
+            pass
+
+    def _priority_score(aum, private_fund_aum, tf_val, alloc_count) -> int:
+        has_deals = alloc_count > 0
+        has_thirteenf = tf_val is not None and tf_val > 0
+        high_aum = aum is not None and aum >= 1e9
+        if (has_deals or has_thirteenf) and high_aum:
+            return 3
+        if has_deals or has_thirteenf or high_aum:
+            return 2
+        return 1
+
     results = []
     for row in (ria_result.data or []):
-        row["matched_platforms"] = crd_to_platforms.get(row["crd_number"], [])
-        row["source"] = crd_to_source.get(row["crd_number"], "edgar_inferred")
+        crd2 = row["crd_number"]
+        tf_val = thirteenf_by_crd.get(crd2)
+        alloc_count = alloc_by_crd.get(crd2, 0)
+        row["matched_platforms"] = crd_to_platforms.get(crd2, [])
+        row["source"] = crd_to_source.get(crd2, "edgar_inferred")
+        row["thirteenf_bdc_value_usd"] = tf_val
+        row["allocation_count_90d"] = alloc_count
+        row["priority_score"] = _priority_score(row.get("aum"), row.get("private_fund_aum"), tf_val, alloc_count)
         results.append(row)
 
+    results.sort(key=lambda r: r["priority_score"], reverse=True)
     return results
 
 

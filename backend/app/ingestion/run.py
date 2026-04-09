@@ -18,7 +18,7 @@ import argparse
 import asyncio
 from datetime import date, timedelta
 
-from app.db.writer import upsert_entity, upsert_filing
+from app.db.writer import upsert_allocation_events, upsert_entity, upsert_filing
 from app.ingestion.edgar_client import fetch_form_d_xml, search_form_d_filings
 from app.ingestion.entity_resolver import EntityResolver
 from app.ingestion.form_d_parser import parse_form_d
@@ -101,7 +101,10 @@ async def run(start_date: date, end_date: date, dry_run: bool = False) -> None:
                 cik=entity_rec["cik"],
                 entity_type="fund",
             )
-            upsert_filing(filing, entity_id=entity_id, raw_xml=xml)
+            filing_id = upsert_filing(filing, entity_id=entity_id, raw_xml=xml)
+            alloc_count = upsert_allocation_events(filing_id, filing)
+            if alloc_count:
+                print(f"  ↗  {filing.entity_name}: {alloc_count} allocation event(s) written")
             written += 1
         except Exception as exc:
             print(f"  ✗  DB write failed for {filing.entity_name}: {exc}")

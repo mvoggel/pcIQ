@@ -288,18 +288,30 @@ function RiaRow({ ria }: { ria: RiaMatch }) {
   );
 }
 
+const PRIORITY_BADGE: Record<number, { label: string; cls: string }> = {
+  3: { label: "High Priority", cls: "bg-red-50 text-red-700 border-red-200" },
+  2: { label: "Medium",        cls: "bg-amber-50 text-amber-700 border-amber-200" },
+  1: { label: "Watchlist",     cls: "bg-slate-100 text-slate-500 border-slate-200" },
+};
+
 function ConfirmedRiaRow({ ria }: { ria: ConfirmedRia }) {
   const iapdUrl = `https://adviserinfo.sec.gov/firm/summary/${ria.crd_number}`;
   const privatePct =
     ria.aum && ria.private_fund_aum
       ? Math.round((ria.private_fund_aum / ria.aum) * 100)
       : null;
+  const badge = ria.priority_score ? PRIORITY_BADGE[ria.priority_score] : null;
 
   return (
     <div className="flex items-center justify-between py-2.5 border-b border-emerald-50 last:border-0 gap-3">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-medium text-slate-800 truncate">{ria.firm_name}</span>
+          {badge && (
+            <span className={`text-xs px-1.5 py-0.5 rounded border font-medium whitespace-nowrap ${badge.cls}`}>
+              {badge.label}
+            </span>
+          )}
           {ria.matched_platforms.map((p) => (
             <span key={p} className="text-xs px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100 whitespace-nowrap">
               {p}

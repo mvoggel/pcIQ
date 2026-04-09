@@ -19,5 +19,11 @@ class Settings(BaseSettings):
     # Secret token for the /api/ingest/trigger endpoint (set in Railway env)
     ingest_secret: str = ""
 
+    # Salesforce OAuth 2.0 (Connected App — set in Railway env)
+    salesforce_client_id: str = ""
+    salesforce_client_secret: str = ""
+    salesforce_refresh_token: str = ""
+    salesforce_instance_url: str = ""   # e.g. https://myorg.my.salesforce.com
+
 
 settings = Settings()
