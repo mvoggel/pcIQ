@@ -161,7 +161,9 @@ export default function AdvisorModal({ advisor, rank, onClose }: Props) {
           {/* Outcome anchor */}
           {anchor && (
             <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-3">
-              <p className="text-sm text-blue-800 font-medium leading-relaxed">→ {anchor}</p>
+              <p className="text-sm text-blue-800 font-medium leading-relaxed">
+                <span className="font-bold tracking-wide mr-1.5">WHY:</span>{anchor}
+              </p>
             </div>
           )}
 
@@ -209,18 +211,40 @@ export default function AdvisorModal({ advisor, rank, onClose }: Props) {
               <p className="text-xs text-slate-500 mb-2">
                 Actively deploying into {activeFunds.length} competing fund{activeFunds.length > 1 ? "s" : ""} — same platforms as CION's distribution channels:
               </p>
-              <ul className="space-y-1.5 pl-1">
-                {activeFunds.map((f, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-slate-700 leading-relaxed">
-                    <span className="shrink-0 text-slate-300 mt-0.5">•</span>
-                    <span>
-                      <span className="font-medium">{f.entity_name}</span>
-                      {f.investment_fund_type && (
-                        <span className="text-slate-400"> · {f.investment_fund_type}</span>
-                      )}
-                    </span>
-                  </li>
-                ))}
+              <ul className="space-y-2 pl-1">
+                {activeFunds.map((f, i) => {
+                  const edgarUrl = f.cik
+                    ? `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${f.cik}&type=D&dateb=&owner=include&count=10`
+                    : null;
+                  const dateStr = f.signal_date
+                    ? new Date(f.signal_date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                    : null;
+                  return (
+                    <li key={i} className="flex items-start gap-2 text-sm text-slate-700 leading-relaxed">
+                      <span className="shrink-0 text-slate-300 mt-0.5">•</span>
+                      <span>
+                        {edgarUrl ? (
+                          <a
+                            href={edgarUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-blue-700 hover:underline"
+                          >
+                            {f.entity_name}
+                          </a>
+                        ) : (
+                          <span className="font-medium">{f.entity_name}</span>
+                        )}
+                        {f.investment_fund_type && (
+                          <span className="text-slate-400"> · {f.investment_fund_type}</span>
+                        )}
+                        {dateStr && (
+                          <span className="ml-1.5 text-xs text-slate-400 font-normal">{dateStr}</span>
+                        )}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}

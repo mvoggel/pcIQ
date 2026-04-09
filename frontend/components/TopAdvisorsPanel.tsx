@@ -6,8 +6,6 @@ import {
   buildSignals,
   getPriority,
   getAumBucket,
-  SOURCE_TAG_STYLES,
-  SOURCE_TAG_LABELS,
   Signal,
 } from "@/lib/advisorSignals";
 import AdvisorModal from "@/components/AdvisorModal";
@@ -82,14 +80,9 @@ export function AdvisorRow({
           )}
         </p>
 
-        {/* Behavioral signal bullet — only 13F or Form D */}
+        {/* Behavioral signal bullet — only 13F or Form D, no tag (detail is in the modal) */}
         {preview && (
-          <p className="mt-1.5 text-xs text-slate-600 leading-relaxed flex items-start gap-1.5">
-            <span
-              className={`shrink-0 mt-px inline-flex items-center text-xs px-1.5 py-px rounded border font-medium ${SOURCE_TAG_STYLES[preview.sourceTag]}`}
-            >
-              {SOURCE_TAG_LABELS[preview.sourceTag]}
-            </span>
+          <p className="mt-1.5 text-xs text-slate-600 leading-relaxed">
             {preview.bullet}
           </p>
         )}
