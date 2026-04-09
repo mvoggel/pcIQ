@@ -234,13 +234,24 @@ def fetch_confirmed_allocators(
             pass
 
     def _priority_score(aum, private_fund_aum, tf_val, alloc_count) -> int:
-        has_deals = alloc_count > 0
+        has_deals     = alloc_count > 0
         has_thirteenf = tf_val is not None and tf_val > 0
-        high_aum = aum is not None and aum >= 1e9
-        if (has_deals or has_thirteenf) and high_aum:
+        large_aum     = aum is not None and aum >= 1_000_000_000   # ≥ $1B
+        mid_aum       = aum is not None and aum >= 500_000_000     # ≥ $500M
+
+        # Score 3 — High Priority: behavioural signals from BOTH sources + large AUM
+        if has_deals and has_thirteenf and large_aum:
             return 3
-        if has_deals or has_thirteenf or high_aum:
+
+        # Score 2 — Medium: any two of the three pillars
+        signal_count = sum([has_deals, has_thirteenf, large_aum])
+        if signal_count >= 2:
             return 2
+
+        # Score 1 — Watchlist: one signal or mid-tier AUM only
+        if has_deals or has_thirteenf or mid_aum:
+            return 1
+
         return 1
 
     results = []

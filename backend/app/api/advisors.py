@@ -60,7 +60,7 @@ def _fmt_aum(aum: float | None) -> str | None:
 @router.get("/advisors")
 def get_advisors(
     territory: str = Query(default=""),
-    limit: int = Query(default=50, ge=1, le=200),
+    limit: int = Query(default=100, ge=1, le=200),
 ) -> dict:
     db = get_db()
 
