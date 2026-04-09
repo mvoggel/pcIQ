@@ -5,6 +5,7 @@ import { AdvisorProfile } from "@/lib/types";
 import {
   buildSignals,
   getPriority,
+  getAumBucket,
   SOURCE_TAG_STYLES,
   SOURCE_TAG_LABELS,
   Signal,
@@ -12,20 +13,6 @@ import {
 import AdvisorModal from "@/components/AdvisorModal";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-const TIER_LABELS: Record<string, string> = {
-  mega:  ">$5B",
-  large: "$1–5B",
-  mid:   "$500M–1B",
-  small: "<$500M",
-};
-
-const TIER_COLORS: Record<string, string> = {
-  mega:  "bg-purple-100 text-purple-700 border-purple-200",
-  large: "bg-blue-100 text-blue-700 border-blue-200",
-  mid:   "bg-sky-100 text-sky-700 border-sky-200",
-  small: "bg-slate-100 text-slate-600 border-slate-200",
-};
 
 /**
  * Returns the single most meaningful signal to preview in the row.
@@ -57,7 +44,8 @@ export function AdvisorRow({
   const signals  = buildSignals(advisor);
   const preview  = compact ? null : getBehavioralPreview(signals);
 
-  const location = [advisor.city, advisor.state].filter(Boolean).join(", ");
+  const location  = [advisor.city, advisor.state].filter(Boolean).join(", ");
+  const aumBucket = getAumBucket(advisor.aum);
 
   return (
     <div
@@ -83,15 +71,13 @@ export function AdvisorRow({
           </span>
         </div>
 
-        {/* Location · AUM · tier badge */}
+        {/* Location · AUM · precise tier badge */}
         <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1.5 flex-wrap">
           {location}
           {advisor.aum_fmt && <span>· {advisor.aum_fmt}</span>}
-          {advisor.aum_tier !== "unknown" && TIER_LABELS[advisor.aum_tier] && (
-            <span
-              className={`inline-flex items-center text-xs px-1.5 py-px rounded border font-medium ${TIER_COLORS[advisor.aum_tier]}`}
-            >
-              {TIER_LABELS[advisor.aum_tier]}
+          {aumBucket && (
+            <span className={`inline-flex items-center text-xs px-1.5 py-px rounded border font-medium ${aumBucket.color}`}>
+              {aumBucket.label}
             </span>
           )}
         </p>

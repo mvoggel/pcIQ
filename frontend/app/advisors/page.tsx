@@ -8,41 +8,47 @@ import { fetchAdvisors } from "@/lib/api";
 import { AdvisorProfile, AdvisorsResponse } from "@/lib/types";
 
 const TERRITORIES = ["", "Northeast", "Southeast", "Midwest", "Southwest", "West Coast"];
+const PAGE_SIZE   = 20;
 
 export default function AdvisorsPage() {
-  const [territory, setTerritory] = useState("");
-  const [data, setData]           = useState<AdvisorsResponse | null>(null);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState<string | null>(null);
-  const [query, setQuery]         = useState("");
-
-  // Modal state for the "All Advisors" list
+  const [territory, setTerritory]   = useState("");
+  const [data, setData]             = useState<AdvisorsResponse | null>(null);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState<string | null>(null);
+  const [query, setQuery]           = useState("");
+  const [visibleCount, setVisible]  = useState(PAGE_SIZE);
   const [activeModal, setActiveModal] = useState<{ advisor: AdvisorProfile; rank: number } | null>(null);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
     setQuery("");
+    setVisible(PAGE_SIZE);
     fetchAdvisors(territory)
       .then(setData)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [territory]);
 
-  const filtered: AdvisorProfile[] = data
-    ? query.trim()
-      ? data.advisors.filter(
-          (a) =>
-            a.firm_name.toLowerCase().includes(query.toLowerCase()) ||
-            a.state.toLowerCase().includes(query.toLowerCase()) ||
-            a.city.toLowerCase().includes(query.toLowerCase())
-        )
-      : data.advisors
-    : [];
+  // Reset visible count when search query changes
+  useEffect(() => { setVisible(PAGE_SIZE); }, [query]);
 
-  // When searching, show all filtered rows; otherwise skip top 10 (shown in panel above)
-  const tableRows  = query ? filtered : filtered.slice(10);
-  const rankOffset = query ? 0 : 10;
+  const allAdvisors: AdvisorProfile[] = data?.advisors ?? [];
+
+  // When searching: filter all advisors and show them as a flat list
+  // When not searching: Top 10 shown in panel; remaining go to the card list below
+  const filtered = query.trim()
+    ? allAdvisors.filter(
+        (a) =>
+          a.firm_name.toLowerCase().includes(query.toLowerCase()) ||
+          a.state.toLowerCase().includes(query.toLowerCase()) ||
+          a.city.toLowerCase().includes(query.toLowerCase())
+      )
+    : allAdvisors.slice(10);   // skip top 10 — they live in TopAdvisorsPanel
+
+  const rankOffset   = query ? 0 : 10;
+  const visibleRows  = filtered.slice(0, visibleCount);
+  const remaining    = filtered.length - visibleCount;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -81,6 +87,36 @@ export default function AdvisorsPage() {
       </div>
 
       <main className="px-4 sm:px-6 py-4 max-w-screen-xl mx-auto">
+
+        {/* ── Search bar — always at top, searches everything ── */}
+        {data && !loading && (
+          <div className="relative mb-5">
+            <svg
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+            </svg>
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={`Search all ${allAdvisors.length} advisors by firm or state…`}
+              className="w-full pl-10 pr-10 py-2.5 text-sm border border-slate-200 rounded-xl bg-white shadow-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            {query && (
+              <button
+                onClick={() => setQuery("")}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+        )}
+
         {loading && (
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
@@ -98,76 +134,35 @@ export default function AdvisorsPage() {
 
         {data && !loading && (
           <>
-            {/* Top 10 — hidden while search is active */}
+            {/* ── Top 10 — hidden while search is active ── */}
             {!query && (
-              <TopAdvisorsPanel advisors={data.advisors} territory={data.territory} />
+              <TopAdvisorsPanel advisors={allAdvisors} territory={data.territory} />
             )}
 
-            {/* All Advisors divider + search */}
+            {/* ── Remaining advisors (or search results) ── */}
             <div className="flex items-center gap-3 mb-3">
               <h2 className="text-sm font-semibold text-slate-900 shrink-0">
-                {query ? "Search Results" : "All Advisors"}
+                {query
+                  ? `${filtered.length} result${filtered.length !== 1 ? "s" : ""} for "${query}"`
+                  : "All Advisors"}
               </h2>
               <div className="h-px flex-1 bg-slate-200" />
-              {!query && data.advisors.length > 10 && (
+              {!query && filtered.length > 0 && (
                 <span className="text-xs text-slate-400 shrink-0">
-                  #{11}–{data.advisors.length}
+                  #{11}–{allAdvisors.length}
                 </span>
               )}
             </div>
 
-            {/* Toolbar */}
-            <div className="mb-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-              <div className="shrink-0 text-sm font-medium text-slate-700">
-                {query ? (
-                  <>
-                    {filtered.length}
-                    <span className="text-slate-400"> of {data.advisors.length}</span> advisor
-                    {data.advisors.length !== 1 ? "s" : ""}
-                  </>
-                ) : (
-                  <>
-                    {Math.max(0, filtered.length - 10)} advisor
-                    {filtered.length - 10 !== 1 ? "s" : ""} below top 10
-                  </>
-                )}
-                {data.territory !== "All" ? ` · ${data.territory}` : ""}
-              </div>
-              <div className="relative sm:flex-1 sm:max-w-xs sm:ml-auto">
-                <svg
-                  className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none"
-                  fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
-                </svg>
-                <input
-                  type="text"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search firm or state…"
-                  className="w-full pl-8 pr-8 py-1.5 text-sm border border-slate-200 rounded-lg bg-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                {query && (
-                  <button
-                    onClick={() => setQuery("")}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Card list — same component as Top 10 */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-              {tableRows.length === 0 ? (
+              {visibleRows.length === 0 ? (
                 <div className="py-12 text-center text-slate-400 text-sm">
-                  {query ? "No advisors match your search" : "No additional advisors beyond top 10"}
+                  {query
+                    ? "No advisors match your search — try a different firm name or state"
+                    : "No additional advisors beyond top 10"}
                 </div>
               ) : (
-                tableRows.map((a, i) => (
+                visibleRows.map((a, i) => (
                   <AdvisorRow
                     key={a.crd_number || i}
                     advisor={a}
@@ -179,6 +174,19 @@ export default function AdvisorsPage() {
               )}
             </div>
 
+            {/* Load more */}
+            {remaining > 0 && (
+              <div className="mt-4 flex justify-center">
+                <button
+                  onClick={() => setVisible((v) => v + PAGE_SIZE)}
+                  className="inline-flex items-center gap-2 px-5 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 shadow-sm transition-colors"
+                >
+                  Load {Math.min(remaining, PAGE_SIZE)} more
+                  <span className="text-xs text-slate-400">({remaining} remaining)</span>
+                </button>
+              </div>
+            )}
+
             {/* Legend */}
             <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-400">
               <span>Priority scored across SEC Form 13F · EDGAR Form D · Form ADV</span>
@@ -189,7 +197,7 @@ export default function AdvisorsPage() {
         )}
       </main>
 
-      {/* Modal for All Advisors rows */}
+      {/* Modal for card list rows */}
       {activeModal && (
         <AdvisorModal
           advisor={activeModal.advisor}

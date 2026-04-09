@@ -5,28 +5,11 @@ import {
   buildSignals,
   getPriority,
   getOutcomeAnchor,
+  getAumBucket,
   SOURCE_TAG_STYLES,
   SOURCE_TAG_LABELS,
   Signal,
 } from "@/lib/advisorSignals";
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-const TIER_LABELS: Record<string, string> = {
-  mega:    ">$5B AUM",
-  large:   "$1–5B AUM",
-  mid:     "$500M–1B AUM",
-  small:   "<$500M AUM",
-  unknown: "AUM unknown",
-};
-
-const TIER_COLORS: Record<string, string> = {
-  mega:    "bg-purple-100 text-purple-700 border-purple-200",
-  large:   "bg-blue-100 text-blue-700 border-blue-200",
-  mid:     "bg-sky-100 text-sky-700 border-sky-200",
-  small:   "bg-slate-100 text-slate-600 border-slate-200",
-  unknown: "bg-slate-50 text-slate-400 border-slate-100",
-};
 
 // Group signals by source tag for cleaner presentation
 function groupSignals(signals: Signal[]): { tag: Signal["sourceTag"]; items: Signal[] }[] {
@@ -55,8 +38,8 @@ export default function AdvisorModal({ advisor, rank, onClose }: Props) {
   const anchor   = getOutcomeAnchor(advisor, signals);
   const groups   = groupSignals(signals);
 
-  const location = [advisor.city, advisor.state].filter(Boolean).join(", ");
-  const tierLabel = advisor.aum_fmt ?? TIER_LABELS[advisor.aum_tier];
+  const location  = [advisor.city, advisor.state].filter(Boolean).join(", ");
+  const aumBucket = getAumBucket(advisor.aum);
 
   return (
     <div
@@ -99,11 +82,12 @@ export default function AdvisorModal({ advisor, rank, onClose }: Props) {
           <h2 className="text-lg font-bold text-slate-900 leading-tight">{advisor.firm_name}</h2>
           <div className="flex flex-wrap items-center gap-2 mt-1.5">
             {location && <span className="text-sm text-slate-500">{location}</span>}
-            {tierLabel && advisor.aum_tier !== "unknown" && (
-              <span
-                className={`inline-flex items-center text-xs px-2 py-0.5 rounded border font-medium ${TIER_COLORS[advisor.aum_tier]}`}
-              >
-                {tierLabel}
+            {advisor.aum_fmt && (
+              <span className="text-sm text-slate-500">{advisor.aum_fmt}</span>
+            )}
+            {aumBucket && (
+              <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded border font-medium ${aumBucket.color}`}>
+                {aumBucket.label}
               </span>
             )}
             {advisor.num_advisors && (

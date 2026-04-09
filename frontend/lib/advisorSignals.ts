@@ -230,3 +230,22 @@ export const SOURCE_TAG_LABELS: Record<Signal["sourceTag"], string> = {
   brochure:  "ADV Brochure",
   inferred:  "EDGAR Inferred",
 };
+
+// ── AUM bucket ────────────────────────────────────────────────────────────────
+
+/**
+ * Returns a precise AUM tier label + Tailwind color string based on raw AUM.
+ * Replaces the coarse mega/large/mid/small backend tier for display purposes.
+ */
+export function getAumBucket(aum: number | null): { label: string; color: string } | null {
+  if (!aum || aum <= 0) return null;
+  if (aum >= 200e9) return { label: ">$200B", color: "bg-purple-200 text-purple-900 border-purple-300" };
+  if (aum >= 100e9) return { label: ">$100B", color: "bg-purple-100 text-purple-700 border-purple-200" };
+  if (aum >= 50e9)  return { label: ">$50B",  color: "bg-indigo-100 text-indigo-700 border-indigo-200" };
+  if (aum >= 25e9)  return { label: ">$25B",  color: "bg-blue-200 text-blue-800 border-blue-300"     };
+  if (aum >= 10e9)  return { label: ">$10B",  color: "bg-blue-100 text-blue-700 border-blue-200"     };
+  if (aum >= 5e9)   return { label: ">$5B",   color: "bg-sky-100 text-sky-700 border-sky-200"        };
+  if (aum >= 1e9)   return { label: "$1–5B",  color: "bg-cyan-50 text-cyan-700 border-cyan-200"      };
+  if (aum >= 5e8)   return { label: "$500M–1B", color: "bg-slate-100 text-slate-600 border-slate-200" };
+  return                   { label: "<$500M", color: "bg-slate-50 text-slate-500 border-slate-100"   };
+}
