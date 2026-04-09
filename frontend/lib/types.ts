@@ -131,6 +131,7 @@ export interface AdvisorProfile {
   activity_score: number;
   thirteenf_bdc_value_usd: number | null;   // total $ held in BDC positions per latest 13F
   thirteenf_period: string | null;           // e.g. "2024-12-31"
+  priority_score: 1 | 2 | 3;               // 3=High, 2=Medium, 1=Watchlist (set by backend)
 }
 
 export interface AdvisorsResponse {
