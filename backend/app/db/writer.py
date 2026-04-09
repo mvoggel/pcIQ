@@ -151,21 +151,29 @@ def upsert_allocation_events(filing_id: int, filing: FormDFiling) -> int:
     """
     db = get_db()
 
-    platform_names = filing.known_platform_names
+    platform_names = filing.known_platform_names  # full legal names, e.g. "iCapital Markets LLC"
     if not platform_names:
         return 0
 
     signal_date = (filing.date_of_first_sale or filing.filed_at or date.today()).isoformat()
 
-    # Find RIAs on those platforms
-    ria_platform_rows = (
+    # ria_platforms stores brand names ("iCapital", "CAIS") while fund_platforms stores
+    # full legal names ("iCapital Markets LLC", "CAIS Capital LLC"). Use substring match:
+    # ria brand is contained in the fund platform legal name (case-insensitive).
+    all_ria_platforms = (
         db.table("ria_platforms")
-        .select("crd_number")
-        .in_("platform_name", platform_names)
+        .select("crd_number, platform_name")
         .execute()
         .data or []
     )
-    crd_numbers = list({r["crd_number"] for r in ria_platform_rows if r.get("crd_number")})
+
+    fund_names_lower = [n.lower() for n in platform_names]
+    crd_numbers = list({
+        r["crd_number"]
+        for r in all_ria_platforms
+        if r.get("crd_number") and r.get("platform_name")
+        and any(r["platform_name"].lower() in fn for fn in fund_names_lower)
+    })
     if not crd_numbers:
         return 0
 
