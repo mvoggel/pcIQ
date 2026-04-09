@@ -168,6 +168,20 @@ def get_advisors(
             + (3 if thirteenf_value and thirteenf_value >= 1e8 else 1 if thirteenf_value else 0)
         )
 
+        # Priority tier — mirrors reader.py _priority_score
+        has_deals     = allocation_count > 0
+        has_thirteenf = thirteenf_value is not None and thirteenf_value > 0
+        large_aum     = aum is not None and aum >= 1_000_000_000
+        mid_aum       = aum is not None and aum >= 500_000_000
+        if has_deals and has_thirteenf and large_aum:
+            priority_score = 3
+        elif sum([has_deals, has_thirteenf, large_aum]) >= 2:
+            priority_score = 2
+        elif has_deals or has_thirteenf or mid_aum:
+            priority_score = 1
+        else:
+            priority_score = 1
+
         advisors.append({
             "crd_number": crd,
             "firm_name": r.get("firm_name") or "",
@@ -186,6 +200,7 @@ def get_advisors(
             "thirteenf_bdc_value_usd": thirteenf_value,
             "thirteenf_period": thirteenf_period,
             "activity_score": round(score, 2),
+            "priority_score": priority_score,
         })
 
     advisors.sort(key=lambda x: x["activity_score"], reverse=True)
