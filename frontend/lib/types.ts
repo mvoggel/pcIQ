@@ -39,6 +39,10 @@ export interface CionFund {
   fifty_day_avg: number | null;
   two_hundred_day_avg: number | null;
   sparkline: number[];
+  total_assets?: number | null;
+  distribution_yield?: number | null;
+  ytd_return?: number | null;
+  three_year_return?: number | null;
   error?: string;
 }
 

@@ -4,8 +4,15 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+interface NavTicker {
+  ticker: string;
+  nav: number | null;
+  nav_change: number | null;
+}
+
 interface Props {
   rightSlot?: React.ReactNode;
+  navTickers?: NavTicker[];
 }
 
 // Real logo PNG with CSS animation — preserves full brand detail
@@ -34,7 +41,7 @@ function AnimatedLogo() {
   );
 }
 
-export default function AppHeader({ rightSlot }: Props) {
+export default function AppHeader({ rightSlot, navTickers }: Props) {
   const pathname = usePathname();
 
   const navItems = [
@@ -57,7 +64,7 @@ export default function AppHeader({ rightSlot }: Props) {
       </div>
 
       {/* Nav tabs */}
-      <nav className="flex px-4 sm:px-6 gap-1">
+      <nav className="flex items-end px-4 sm:px-6 gap-1">
         {navItems.map(({ href, label }) => {
           const active = pathname === href || (href === "/signals" && pathname === "/");
           return (
@@ -74,6 +81,21 @@ export default function AppHeader({ rightSlot }: Props) {
             </Link>
           );
         })}
+        {navTickers && navTickers.length > 0 && (
+          <div className="ml-auto flex items-center gap-3 pb-2.5">
+            {navTickers.map((t) => {
+              const up = (t.nav_change ?? 0) >= 0;
+              return (
+                <span key={t.ticker} className="flex items-center gap-1">
+                  <span className="text-xs text-slate-500 font-mono">{t.ticker}</span>
+                  <span className={`text-xs font-semibold tabular-nums ${up ? "text-emerald-400" : "text-red-400"}`}>
+                    {up ? "▲" : "▼"} {t.nav != null ? `$${t.nav.toFixed(2)}` : "—"}
+                  </span>
+                </span>
+              );
+            })}
+          </div>
+        )}
       </nav>
     </header>
   );

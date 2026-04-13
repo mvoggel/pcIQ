@@ -61,6 +61,11 @@ def _build_fund(ticker_sym: str, strategy: str, focus: str) -> dict:
         "fifty_two_week_low": info.get("fiftyTwoWeekLow"),
         "fifty_day_avg": info.get("fiftyDayAverage"),
         "two_hundred_day_avg": info.get("twoHundredDayAverage"),
+        # Financial performance enrichment
+        "total_assets": info.get("totalAssets"),
+        "distribution_yield": info.get("yield") or info.get("dividendYield"),
+        "ytd_return": info.get("ytdReturn"),
+        "three_year_return": info.get("threeYearAverageReturn"),
         # Sparkline (90 days of daily NAV)
         "sparkline": sparkline,
     }
