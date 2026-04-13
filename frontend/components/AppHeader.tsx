@@ -45,7 +45,7 @@ function TickerBadge({ ticker, nav, nav_change }: FundTicker) {
   const up = (nav_change ?? 0) >= 0;
   return (
     <span className="inline-flex items-center gap-1.5 border border-slate-700 rounded-md px-2.5 py-1 bg-slate-800/60">
-      <span className="text-[10px] font-mono text-slate-400 leading-none hidden sm:inline">
+      <span className="text-[10px] font-mono text-slate-400 leading-none">
         {ticker}
       </span>
       <span
