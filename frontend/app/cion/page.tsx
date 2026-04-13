@@ -271,10 +271,6 @@ export default function CionPage() {
     )
     .slice(0, 10);
 
-  const navTickers = funds
-    .filter((f) => !f.error)
-    .map((f) => ({ ticker: f.ticker, nav: f.nav, nav_change: f.nav_change }));
-
   const stats = [
     {
       value: platformStats ? platformStats.rias_tracked.toLocaleString() : "2,543",
@@ -304,7 +300,7 @@ export default function CionPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <AppHeader navTickers={navTickers} />
+      <AppHeader />
 
       {/* ── Platform stats cards ────────────────────────────────────── */}
       <div className="bg-slate-800 border-b border-slate-700">
