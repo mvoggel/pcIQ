@@ -46,6 +46,21 @@ export interface CionFund {
   error?: string;
 }
 
+export interface NPortMetrics {
+  period: string | null;           // e.g. "2025-12-31"
+  net_assets: number | null;       // total net assets USD
+  total_assets: number | null;     // total assets USD
+  borrowings: number | null;       // long-term borrowings USD
+  monthly_returns: number[];       // last 3 monthly total returns (%)
+  total_holdings: number;          // number of portfolio positions
+  debt_count: number;              // positions with a debtSec node
+  defaults: number;                // positions with isDefault=Y
+  arrears: number;                 // positions with areIntrstPmntsInArrs=Y
+  pik_count: number;               // positions paying PIK interest
+  asset_categories: Record<string, number>; // {category: count}
+  error?: string;
+}
+
 export interface ClientType {
   label: string;
   clients: number | null;

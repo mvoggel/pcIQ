@@ -3,8 +3,23 @@
 import { useState, useEffect } from "react";
 import AppHeader from "@/components/AppHeader";
 import CionFundCard from "@/components/CionFundCard";
-import { fetchCionFunds, fetchAdvisors, fetchPlatformStats } from "@/lib/api";
-import { CionFund, AdvisorProfile } from "@/lib/types";
+import { fetchCionFunds, fetchAdvisors, fetchPlatformStats, fetchNPortMetrics } from "@/lib/api";
+import { CionFund, AdvisorProfile, NPortMetrics } from "@/lib/types";
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmtUSD(n: number | null | undefined): string {
+  if (n == null) return "—";
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+  return `$${n.toLocaleString()}`;
+}
+
+function fmtPeriod(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso + "T00:00:00Z");
+  return d.toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+}
 
 // ── Platform chip ────────────────────────────────────────────────────────────
 
@@ -51,97 +66,158 @@ function ConfirmedPartnerRow({ ria, rank }: { ria: AdvisorProfile; rank: number 
   );
 }
 
-// ── Financial metric card ────────────────────────────────────────────────────
+// ── Metric card ──────────────────────────────────────────────────────────────
 
 function MetricCard({
   label,
   value,
   sub,
-  positive,
+  sentiment,
 }: {
   label: string;
   value: string;
   sub?: string;
-  positive?: boolean;
+  sentiment?: "positive" | "negative" | "neutral";
 }) {
   const valueColor =
-    positive === undefined
-      ? "text-slate-900"
-      : positive
+    sentiment === "positive"
       ? "text-emerald-600"
-      : "text-red-500";
+      : sentiment === "negative"
+      ? "text-red-500"
+      : "text-slate-900";
+
   return (
-    <div className="bg-white rounded-lg border border-slate-200 px-4 py-3.5">
-      <p className="text-xs uppercase tracking-wider text-slate-400 mb-1">{label}</p>
-      <p className={`text-lg font-bold ${valueColor}`}>{value}</p>
+    <div className="bg-white rounded-lg border border-slate-200 px-4 py-3.5 flex flex-col gap-0.5">
+      <p className="text-xs uppercase tracking-wider text-slate-400">{label}</p>
+      <p className={`text-lg font-bold leading-tight ${valueColor}`}>{value}</p>
       {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
     </div>
   );
 }
 
-// ── Fund financial summary ───────────────────────────────────────────────────
+// ── Per-fund N-PORT summary ──────────────────────────────────────────────────
 
-function FundPerformanceSummary({ fund }: { fund: CionFund }) {
-  const fmtPct = (n: number | null | undefined) => {
-    if (n == null) return "—";
-    const v = Math.abs(n) > 1 ? n : n * 100;
-    const sign = v >= 0 ? "+" : "";
-    return `${sign}${v.toFixed(2)}%`;
-  };
+function FundNPortSummary({
+  fund,
+  metrics,
+}: {
+  fund: CionFund;
+  metrics: NPortMetrics | undefined;
+}) {
+  if (!metrics || metrics.error) return null;
 
-  const fmtAUM = (n: number | null | undefined) => {
-    if (n == null) return "—";
-    if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
-    if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
-    return `$${n.toLocaleString()}`;
-  };
+  const period = fmtPeriod(metrics.period);
+  const sourceLabel = period ? `SEC N-PORT · ${period}` : "SEC N-PORT filing";
 
-  const vsMA200 =
-    fund.nav != null && fund.two_hundred_day_avg != null
-      ? ((fund.nav - fund.two_hundred_day_avg) / fund.two_hundred_day_avg) * 100
-      : null;
+  // CADUX: private credit → emphasise scale, credit quality, PIK exposure
+  // CGIQX: infrastructure → emphasise scale, portfolio count, recent return, leverage
+  const cards =
+    fund.ticker === "CADUX"
+      ? [
+          {
+            label: "Net Assets",
+            value: fmtUSD(metrics.net_assets),
+            sub: sourceLabel,
+            sentiment: "neutral" as const,
+          },
+          {
+            label: "Portfolio Positions",
+            value: metrics.total_holdings > 0 ? metrics.total_holdings.toLocaleString() : "—",
+            sub: `across ${(metrics.asset_categories["LON"] ?? 0).toLocaleString()} loans + other credit`,
+            sentiment: "neutral" as const,
+          },
+          {
+            label: "Credit Health",
+            value:
+              metrics.defaults === 0 && metrics.arrears === 0
+                ? "0 defaults"
+                : `${metrics.defaults} default${metrics.defaults !== 1 ? "s" : ""}`,
+            sub:
+              metrics.defaults === 0 && metrics.arrears === 0
+                ? "0 in payment arrears"
+                : `${metrics.arrears} in payment arrears`,
+            sentiment:
+              metrics.defaults === 0 && metrics.arrears === 0
+                ? ("positive" as const)
+                : ("negative" as const),
+          },
+          {
+            label: "PIK Exposure",
+            value: metrics.debt_count > 0 ? `${metrics.pik_count} positions` : "—",
+            sub:
+              metrics.debt_count > 0
+                ? `${((metrics.pik_count / metrics.debt_count) * 100).toFixed(1)}% of debt book paying PIK`
+                : undefined,
+            sentiment:
+              metrics.debt_count > 0 && metrics.pik_count / metrics.debt_count < 0.15
+                ? ("positive" as const)
+                : ("negative" as const),
+          },
+        ]
+      : [
+          {
+            label: "Net Assets",
+            value: fmtUSD(metrics.net_assets),
+            sub: sourceLabel,
+            sentiment: "neutral" as const,
+          },
+          {
+            label: "Portfolio Investments",
+            value: metrics.total_holdings > 0 ? `${metrics.total_holdings}` : "—",
+            sub: "infrastructure co-investments",
+            sentiment: "neutral" as const,
+          },
+          {
+            label: "Last Month Return",
+            value:
+              metrics.monthly_returns[0] != null
+                ? `${metrics.monthly_returns[0] >= 0 ? "+" : ""}${metrics.monthly_returns[0].toFixed(2)}%`
+                : "—",
+            sub:
+              metrics.monthly_returns.length >= 3
+                ? `prev: ${metrics.monthly_returns[1] >= 0 ? "+" : ""}${metrics.monthly_returns[1].toFixed(2)}%, ${metrics.monthly_returns[2] >= 0 ? "+" : ""}${metrics.monthly_returns[2].toFixed(2)}%`
+                : undefined,
+            sentiment:
+              metrics.monthly_returns[0] != null
+                ? metrics.monthly_returns[0] >= 0
+                  ? ("positive" as const)
+                  : ("negative" as const)
+                : "neutral" as const,
+          },
+          {
+            label: "Leverage",
+            value:
+              metrics.borrowings != null && metrics.borrowings > 0
+                ? fmtUSD(metrics.borrowings)
+                : "None",
+            sub:
+              metrics.borrowings != null && metrics.borrowings > 0
+                ? "long-term borrowings"
+                : "no external debt",
+            sentiment:
+              metrics.borrowings == null || metrics.borrowings === 0
+                ? ("positive" as const)
+                : ("neutral" as const),
+          },
+        ];
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
+      {/* Fund header */}
       <div className="flex items-center gap-2 mb-4">
         <span className="text-xs font-bold tracking-wider text-white bg-slate-700 px-2 py-0.5 rounded font-mono">
           {fund.ticker}
         </span>
-        <span className="text-sm font-semibold text-slate-800">{fund.name}</span>
-        <span className="text-xs text-blue-600 border border-blue-200 bg-blue-50 rounded px-1.5 py-0.5 ml-auto">
+        <span className="text-sm font-semibold text-slate-800 truncate">{fund.name}</span>
+        <span className="text-xs text-blue-600 border border-blue-200 bg-blue-50 rounded px-1.5 py-0.5 ml-auto shrink-0">
           {fund.focus}
         </span>
       </div>
+      {/* Metric grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <MetricCard
-          label="Total Net Assets"
-          value={fmtAUM(fund.total_assets)}
-          sub="fund size"
-        />
-        <MetricCard
-          label="Distribution Yield"
-          value={fund.distribution_yield != null ? `${(fund.distribution_yield * 100).toFixed(2)}%` : "—"}
-          sub="trailing 12-mo"
-          positive={fund.distribution_yield != null ? fund.distribution_yield > 0 : undefined}
-        />
-        <MetricCard
-          label="YTD Return"
-          value={fmtPct(fund.ytd_return)}
-          sub="year to date"
-          positive={fund.ytd_return != null ? fund.ytd_return >= 0 : undefined}
-        />
-        <MetricCard
-          label="vs 200-Day Avg"
-          value={vsMA200 != null ? `${vsMA200 >= 0 ? "+" : ""}${vsMA200.toFixed(2)}%` : "—"}
-          sub={
-            vsMA200 != null
-              ? vsMA200 >= 0
-                ? "trading above trend"
-                : "trading below trend"
-              : undefined
-          }
-          positive={vsMA200 != null ? vsMA200 >= 0 : undefined}
-        />
+        {cards.map((c) => (
+          <MetricCard key={c.label} {...c} />
+        ))}
       </div>
     </div>
   );
@@ -153,6 +229,9 @@ export default function CionPage() {
   const [funds, setFunds] = useState<CionFund[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [nportData, setNportData] = useState<Record<string, NPortMetrics>>({});
+  const [nportLoading, setNportLoading] = useState(true);
 
   const [allAdvisors, setAllAdvisors] = useState<AdvisorProfile[]>([]);
   const [advisorsLoading, setAdvisorsLoading] = useState(true);
@@ -170,6 +249,12 @@ export default function CionPage() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
 
+    // N-PORT can be slow (live EDGAR fetch on first hit); show loading state
+    fetchNPortMetrics()
+      .then(setNportData)
+      .catch(() => {})
+      .finally(() => setNportLoading(false));
+
     fetchAdvisors("", 50)
       .then((r) => setAllAdvisors(r.advisors))
       .catch(() => {})
@@ -180,14 +265,12 @@ export default function CionPage() {
       .catch(() => {});
   }, []);
 
-  // Only show RIAs with at least one CSV-confirmed platform relationship
   const confirmedPartners = allAdvisors
     .filter((ria) =>
       Object.values(ria.platform_sources ?? {}).some((s) => s === "csv")
     )
     .slice(0, 10);
 
-  // Nav ticker data — pass live CION fund prices into the header
   const navTickers = funds
     .filter((f) => !f.error)
     .map((f) => ({ ticker: f.ticker, nav: f.nav, nav_change: f.nav_change }));
@@ -214,6 +297,10 @@ export default function CionPage() {
       desc: "from SEC EDGAR",
     },
   ];
+
+  // Has any valid N-PORT data loaded (no error key at top level)
+  const hasNportData =
+    !nportLoading && Object.values(nportData).some((m) => !m.error);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -273,16 +360,29 @@ export default function CionPage() {
           <div className="mb-4">
             <h2 className="text-base font-semibold text-slate-900">Financial Performance Data</h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Fund-level performance indicators and confirmed distribution relationships.
+              Portfolio health metrics pulled directly from SEC EDGAR N-PORT filings — net assets, credit quality, PIK exposure, and leverage.
             </p>
           </div>
 
-          {/* Performance by fund */}
-          {!loading && !error && funds.length > 0 && (
+          {/* N-PORT metric cards */}
+          {nportLoading && (
+            <div className="flex items-center gap-2 text-xs text-slate-400 mb-6 py-4">
+              <div className="w-4 h-4 border-2 border-slate-300 border-t-transparent rounded-full animate-spin" />
+              Fetching SEC EDGAR filings…
+            </div>
+          )}
+
+          {!nportLoading && hasNportData && (
             <div className="flex flex-col gap-4 mb-8">
-              {funds.map((fund) =>
-                fund.error ? null : <FundPerformanceSummary key={fund.ticker} fund={fund} />
-              )}
+              {funds
+                .filter((f) => !f.error)
+                .map((fund) => (
+                  <FundNPortSummary
+                    key={fund.ticker}
+                    fund={fund}
+                    metrics={nportData[fund.ticker]}
+                  />
+                ))}
             </div>
           )}
 

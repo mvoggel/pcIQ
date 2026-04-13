@@ -1,4 +1,4 @@
-import { AdvisorsResponse, CionFund, FundEnrichment, SignalsResponse, ThirteenFHoldersResponse } from "./types";
+import { AdvisorsResponse, CionFund, FundEnrichment, NPortMetrics, SignalsResponse, ThirteenFHoldersResponse } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -60,6 +60,12 @@ export async function fetchFundMovements(cik: string, accessionNo: string): Prom
 
 export async function fetchAdvisorFunds(crd: string): Promise<import("./types").AdvisorFundsResponse> {
   const res = await fetch(`${API_BASE}/api/advisors/${encodeURIComponent(crd)}/funds`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json();
+}
+
+export async function fetchNPortMetrics(): Promise<Record<string, NPortMetrics>> {
+  const res = await fetch(`${API_BASE}/api/cion/nport-metrics`, { cache: "no-store" });
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();
 }
